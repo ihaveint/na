@@ -295,6 +295,12 @@ Use "component" when the user wants:
 - The current_code is already provided — ALWAYS use "component" to modify it, never revert to schema
 - Significant custom visual structure
 
+CRITICAL — when current_code is provided:
+- Make ONLY the minimal change the user asked for. Do not redesign, reformat, or restyle anything else.
+- Copy the existing code exactly and add/change only what is explicitly requested.
+- Preserve all existing variable names, structure, styling, and logic that was not mentioned.
+- If the user asked for a tooltip on one column, add only that tooltip. Do not change colors, fonts, layout, other columns, or any other part of the component.
+
 Use "question" when:
 - The request is too vague to act on ("make it better", "change it")
 - Key parameters are missing for the requested layout
