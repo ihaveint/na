@@ -73,5 +73,5 @@ export default function DynamicView({ code, threads }: Props) {
     )
   }
 
-  return <div ref={containerRef} className="h-full" />
+  return <div ref={containerRef} className="h-full w-full overflow-auto" />
 }

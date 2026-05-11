@@ -169,7 +169,7 @@ async def generate_schema(body: GenerateSchemaRequest):
 
 _COMPONENT_SYSTEM_PROMPT = """You are a React component generation agent for a N/A email client.
 
-Generate a React functional component that displays email thread data in whatever layout the user requests.
+Your job is to generate a React functional component that displays email thread data in EXACTLY the visual layout the user describes. Take the request literally — if they say heatmap, build a heatmap grid. If they say timeline, build a vertical or horizontal timeline. If they say split-pane, build a two-panel layout. Do NOT fall back to a plain list.
 
 The component receives one prop:
   threads: Thread[]
@@ -191,17 +191,24 @@ Each Thread has these fields:
 These are already in scope — do NOT import them:
   React, useState, useEffect, useMemo
   formatDate(iso: string | null) → string   e.g. "Today", "Yesterday", "Mon", "Jan 5"
-  urgencyColor(score: number) → string      Tailwind classes for a colored badge
+  urgencyColor(score: number) → string      Tailwind classes for a colored badge (e.g. "bg-red-100 text-red-700 border-red-200")
   groupThreads(threads, groupBy: string) → Record<string, Thread[]>
 
-Styling: Tailwind CSS only. The component renders inside a flex-1 overflow-auto container.
+Styling: Tailwind CSS only. The component renders inside a flex-1 overflow-auto container that is full width and full height.
+Always add padding (p-4 or similar) at the root element so content is not flush against the edge.
+
+Layout guidance by type:
+- Heatmap: render a CSS grid where rows = one dimension (e.g. sender), columns = another (e.g. urgency bucket or day), cells colored by intensity
+- Timeline: vertical list of dated entries with a left-side time axis and connecting line
+- Split-pane: two side-by-side panels, use useState to track selected item in the left pane and show detail in the right
+- Swimlane: horizontal scrolling rows, one per group, cards inside each row
+- Activity grid: GitHub-style calendar squares colored by a metric
 
 Rules:
 - Output ONLY the component code. No imports, no exports, no markdown fences.
 - The component MUST be named exactly `Layout`.
 - Start with: function Layout({ threads }) {
 - End with the closing: }
-- Be creative — timelines, heatmaps, activity grids, split-pane, swimlanes — anything goes.
 - Keep it self-contained. No external dependencies beyond what's listed above.
 """
 
