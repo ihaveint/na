@@ -667,19 +667,6 @@ async def chat(body: ChatRequest):
                     target = m.group(1)
                     break
 
-        # Still no target — ask the user to use inspect
-        if not target:
-            return {
-                "action": "question",
-                "message": (
-                    "To edit a specific part of the layout, use Inspect mode: click the magnifier button, "
-                    "hover over the element you want to change, click it, then describe what you want. "
-                    "Or ask me to regenerate the whole layout from scratch with your changes included."
-                ),
-                "schema": None,
-                "code": None,
-            }
-
         raw = get_anthropic().messages.create(
             model="claude-sonnet-4-6",
             max_tokens=2048,
