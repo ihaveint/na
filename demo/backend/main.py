@@ -16,7 +16,7 @@ from data import THREADS, THREADS_BY_ID
 
 load_dotenv()
 
-app = FastAPI(title="Malleable Email Demo")
+app = FastAPI(title="N/A Email Demo")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -106,7 +106,7 @@ async def get_manifest():
 # Schema generation — AI agent translates natural language → UISchema
 # ---------------------------------------------------------------------------
 
-_SYSTEM_PROMPT = """You are a UI schema generation agent for a malleable email client.
+_SYSTEM_PROMPT = """You are a UI schema generation agent for a N/A email client.
 
 Given:
 1. A Semantic Manifest describing available data and operations
@@ -167,7 +167,7 @@ async def generate_schema(body: GenerateSchemaRequest):
 # Component generation — AI agent writes a React component from scratch
 # ---------------------------------------------------------------------------
 
-_COMPONENT_SYSTEM_PROMPT = """You are a React component generation agent for a malleable email client.
+_COMPONENT_SYSTEM_PROMPT = """You are a React component generation agent for a N/A email client.
 
 Generate a React functional component that displays email thread data in whatever layout the user requests.
 

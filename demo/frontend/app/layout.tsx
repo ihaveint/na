@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Malleable Mail",
+  title: "N/A",
   description: "Same data. Any interface.",
 };
 

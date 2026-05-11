@@ -60,7 +60,7 @@ export default function Home() {
             <div className="w-6 h-6 rounded bg-violet-600 flex items-center justify-center">
               <span className="text-white text-xs font-bold">M</span>
             </div>
-            <span className="text-sm font-semibold text-zinc-800">Malleable Mail</span>
+            <span className="text-sm font-semibold text-zinc-800">N/A</span>
           </div>
         </div>
 
