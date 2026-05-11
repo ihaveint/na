@@ -338,30 +338,52 @@ Component must be named exactly `Layout`, no imports, no exports.
 """
 
 
-def _make_modify_prompt(current_code: str) -> str:
-    return f"""You are a surgical code editor. Your only job is to apply the smallest possible change to an existing React component.
+def _make_patch_prompt(current_code: str) -> str:
+    return f"""You are a surgical code patcher. Apply the minimum change to an existing React component using find/replace patches.
 
-THE EXISTING COMPONENT (do not change anything not explicitly requested):
+THE EXISTING COMPONENT:
 ```jsx
 {current_code}
 ```
 
-RULES — read carefully:
-1. Copy the component above exactly, character for character.
-2. Apply ONLY the specific change the user requests. Nothing else.
-3. Do not rename variables, reformat code, change styling, restructure logic, or alter any line that is not directly involved in the requested change.
-4. If the change requires hover state, use useState (already in scope). Example pattern for a tooltip:
-   const [hovered, setHovered] = useState(null)
-   ...onMouseEnter={{() => setHovered(id)}} onMouseLeave={{() => setHovered(null)}}
-   {{hovered === id && <div style={{position:'absolute', ...}}>tooltip content</div>}}
-5. For absolutely-positioned tooltips, the parent element needs style={{position:'relative'}}.
+Return find/replace patches that together implement the requested change.
 
-Respond with valid JSON only (no markdown):
-{{"action":"component","message":"one sentence describing only what changed","code":"function Layout({{ threads }}) {{ ... }}"}}
+RULES:
+1. "find" must be copied CHARACTER-FOR-CHARACTER from the component above — exact whitespace, exact indentation, exact newlines. Do not paraphrase.
+2. Each patch should be as small as possible — just the specific characters that need to change.
+3. Use 1–3 patches maximum.
+4. If new state is needed (e.g. for hover/tooltip), add it right after the opening line of the function. The find string for that patch should start with the character immediately after `function Layout({{ threads }}) {{`.
+5. For tooltips: use position:'fixed' with e.clientX/e.clientY from mouse events so the tooltip follows the cursor and never gets clipped.
+6. Available in scope (do NOT import): React, useState, useEffect, useMemo, formatDate, urgencyColor, groupThreads.
 
-If the request is too vague to act on, respond:
-{{"action":"question","message":"your clarifying question","code":null}}
+Respond with valid JSON only — no markdown, no text outside the JSON:
+{{"action":"patch","message":"one sentence describing the change","patches":[{{"find":"exact string from code","replace":"replacement string"}}]}}
+
+If the request is too vague, respond:
+{{"action":"question","message":"your question","patches":[]}}
 """
+
+
+def _apply_patches(code: str, patches: list[dict]) -> str | None:
+    result = code
+    for patch in patches:
+        find = patch.get("find", "")
+        replace = patch.get("replace", "")
+        if not find or find not in result:
+            return None  # patch failed — find string not in code
+        result = result.replace(find, replace, 1)
+    return result
+
+
+def _parse_response(raw: str) -> dict:
+    if raw.startswith("```"):
+        raw = "\n".join(raw.split("\n")[1:])
+    if raw.endswith("```"):
+        raw = "\n".join(raw.split("\n")[:-1])
+    start = raw.find("{")
+    if start > 0:
+        raw = raw[start:]
+    return json.loads(raw.strip())
 
 
 @app.post("/chat")
@@ -369,38 +391,45 @@ async def chat(body: ChatRequest):
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
 
     if body.current_code:
-        # Modification path: dedicated surgical-edit prompt with code baked into system prompt
-        system = _make_modify_prompt(body.current_code)
-        # No extra context prepended — the code is already in the system prompt
+        # Patch path: ask Claude for find/replace patches, apply them ourselves
+        raw = get_anthropic().messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2048,
+            system=_make_patch_prompt(body.current_code),
+            messages=messages,
+        ).content[0].text.strip()
+
+        try:
+            parsed = _parse_response(raw)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"JSON parse error: {e}\nRaw: {raw}")
+
+        if parsed.get("action") == "patch":
+            patched = _apply_patches(body.current_code, parsed.get("patches", []))
+            if patched:
+                return {"action": "component", "message": parsed["message"], "schema": None, "code": patched}
+            # Patches failed — fall through to full regeneration below
+        elif parsed.get("action") == "question":
+            return {"action": "question", "message": parsed["message"], "schema": None, "code": None}
+
+        # Fallback: full regeneration using the generation prompt
+        messages = [{"role": "user", "content": f"Current component:\n```jsx\n{body.current_code}\n```\n\n{messages[0]['content']}"}] + messages[1:]
+
     else:
-        # Generation path: full chat prompt with schema context
-        system = _CHAT_SYSTEM_PROMPT
+        # Generation path
         context = f"Current schema:\n{body.current_schema.model_dump_json(indent=2)}"
         if messages:
-            messages = [
-                {"role": "user", "content": context + "\n\n" + messages[0]["content"]}
-            ] + messages[1:]
+            messages = [{"role": "user", "content": context + "\n\n" + messages[0]["content"]}] + messages[1:]
 
-    response = get_anthropic().messages.create(
+    raw = get_anthropic().messages.create(
         model="claude-sonnet-4-6",
         max_tokens=4096,
-        system=system,
+        system=_CHAT_SYSTEM_PROMPT,
         messages=messages,
-    )
-
-    raw = response.content[0].text.strip()
-    # Strip markdown fences
-    if raw.startswith("```"):
-        raw = "\n".join(raw.split("\n")[1:])
-    if raw.endswith("```"):
-        raw = "\n".join(raw.split("\n")[:-1])
-    # Find the JSON object even if Claude prepended explanatory text
-    start = raw.find("{")
-    if start > 0:
-        raw = raw[start:]
+    ).content[0].text.strip()
 
     try:
-        parsed = json.loads(raw.strip())
+        parsed = _parse_response(raw)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"JSON parse error: {e}\nRaw: {raw}")
 
