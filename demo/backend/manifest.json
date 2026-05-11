@@ -1,0 +1,118 @@
+{
+  "schema_version": "0.1",
+  "entities": {
+    "Thread": {
+      "id": {
+        "type": "str"
+      },
+      "subject": {
+        "type": "str",
+        "description": "Email subject line"
+      },
+      "sender": {
+        "type": "str",
+        "description": "Sender email address"
+      },
+      "sender_name": {
+        "type": "str",
+        "description": "Sender display name"
+      },
+      "preview": {
+        "type": "str",
+        "description": "First line of email body"
+      },
+      "project": {
+        "type": "str?",
+        "description": "Project or label tag"
+      },
+      "urgency_score": {
+        "type": "int",
+        "description": "Urgency 0-100, higher = more urgent"
+      },
+      "date": {
+        "type": "datetime",
+        "description": "Date received"
+      },
+      "is_read": {
+        "type": "bool",
+        "description": "Whether the thread has been read"
+      },
+      "is_snoozed": {
+        "type": "bool",
+        "description": "Whether the thread is snoozed"
+      },
+      "due_date": {
+        "type": "datetime?",
+        "description": "User-set due date"
+      },
+      "tags": {
+        "type": "str[]",
+        "description": "User-applied tags"
+      }
+    }
+  },
+  "endpoints": [
+    {
+      "endpoint": "list_threads",
+      "entity": "Thread",
+      "intent": "list_all",
+      "description": "All threads, newest first",
+      "return_type": "void"
+    },
+    {
+      "endpoint": "list_actionable_threads",
+      "entity": "Thread",
+      "intent": "list_actionable",
+      "description": "Unread or pending threads that need attention",
+      "return_type": "void"
+    },
+    {
+      "endpoint": "get_thread",
+      "entity": "Thread",
+      "intent": "get",
+      "description": "Fetch a single thread by ID",
+      "return_type": "void",
+      "params": {
+        "thread_id": "str"
+      }
+    },
+    {
+      "endpoint": "snooze_thread",
+      "entity": "Thread",
+      "operation": "snooze",
+      "description": "Snooze a thread until a given datetime",
+      "return_type": "void",
+      "params": {
+        "thread_id": "str",
+        "body": "SnoozeRequest"
+      }
+    },
+    {
+      "endpoint": "tag_thread",
+      "entity": "Thread",
+      "operation": "tag_project",
+      "description": "Assign a thread to a project",
+      "return_type": "void",
+      "params": {
+        "thread_id": "str",
+        "body": "TagRequest"
+      }
+    },
+    {
+      "endpoint": "mark_done",
+      "entity": "Thread",
+      "operation": "mark_done",
+      "description": "Mark a thread as read/done",
+      "return_type": "void",
+      "params": {
+        "thread_id": "str"
+      }
+    }
+  ],
+  "layouts": [
+    "list",
+    "kanban",
+    "calendar",
+    "table"
+  ]
+}
