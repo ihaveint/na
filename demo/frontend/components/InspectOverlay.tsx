@@ -28,14 +28,28 @@ export default function InspectOverlay({ active, onElementClick }: Props) {
 
   function buildContext(el: Element): string {
     const text = el.textContent?.trim().replace(/\s+/g, " ").slice(0, 60) ?? ""
-    const tag = el.tagName.toLowerCase()
-    const path: string[] = [tag]
-    let cursor = el.parentElement
-    for (let i = 0; i < 2 && cursor && !cursor.hasAttribute("data-dynamic-root"); i++) {
-      path.unshift(cursor.tagName.toLowerCase())
+
+    // Walk up to find the nearest data-sc sub-component marker
+    let scName: string | null = null
+    let cursor: Element | null = el
+    while (cursor && !cursor.hasAttribute("data-dynamic-root")) {
+      if (cursor.hasAttribute("data-sc")) {
+        scName = cursor.getAttribute("data-sc")
+        break
+      }
       cursor = cursor.parentElement
     }
-    return text ? `"${text}" (${path.join(" › ")})` : `(${path.join(" › ")})`
+
+    const tag = el.tagName.toLowerCase()
+    const path: string[] = [tag]
+    let parent = el.parentElement
+    for (let i = 0; i < 2 && parent && !parent.hasAttribute("data-dynamic-root"); i++) {
+      path.unshift(parent.tagName.toLowerCase())
+      parent = parent.parentElement
+    }
+
+    const domContext = text ? `"${text}" (${path.join(" › ")})` : `(${path.join(" › ")})`
+    return scName ? `[${scName}] ${domContext}` : domContext
   }
 
   function handleMouseMove(e: React.MouseEvent) {

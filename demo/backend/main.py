@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import os
+import re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
@@ -291,19 +292,22 @@ Use "schema" when the user wants:
 - Simple, well-defined presentation changes
 
 Use "component" when the user wants:
-- A layout not in the schema: heatmap, timeline, split-pane, activity grid, swimlane, or any novel visual
-- The current_code is already provided — ALWAYS use "component" to modify it, never revert to schema
-- Significant custom visual structure
+- Any feature the schema cannot express: tooltips, click interactions, custom cell rendering, conditional styling, hover effects
+- A novel layout: heatmap, timeline, split-pane, activity grid, swimlane
+- current_code is provided — ALWAYS use "component", never revert to schema
 
-CRITICAL — when current_code is provided:
-- Make ONLY the minimal change the user asked for. Do not redesign, reformat, or restyle anything else.
-- Copy the existing code exactly and add/change only what is explicitly requested.
-- Preserve all existing variable names, structure, styling, and logic that was not mentioned.
-- If the user asked for a tooltip on one column, add only that tooltip. Do not change colors, fonts, layout, other columns, or any other part of the component.
+When current_code is NOT provided (schema mode) and you choose "component":
+- Replicate the current schema layout visually: same layout type (table/list/kanban), same columns/fields, same sort order
+- Then add the requested feature on top — do NOT invent a new visual style from scratch
+- A table schema → generate a table component with the same columns. A list schema → generate a list component.
+
+When current_code IS provided:
+- Make ONLY the minimal change asked for. Do not redesign, reformat, or restyle anything else.
+- Preserve all existing variable names, structure, styling, and logic not mentioned.
 
 Use "question" when:
-- The request is too vague to act on ("make it better", "change it")
-- Key parameters are missing for the requested layout
+- The request is too vague ("make it better", "change it")
+- Key parameters are missing
 - Ask ONE focused question
 
 --- SCHEMA FORMAT ---
@@ -330,49 +334,289 @@ Always include at least ["subject","sender_name"] in card_fields.
 Props: { threads: Thread[] }  (same fields as above)
 Already in scope — do NOT import: React, useState, useEffect, useMemo, formatDate(iso), urgencyColor(score), groupThreads(threads, field)
 
+urgencyColor(score) returns a STRING of Tailwind classes like "bg-red-100 text-red-700 border-red-200".
+Use it ONLY in className, never in style. Example: <span className={urgencyColor(thread.urgency_score)}>
+
 CRITICAL styling: use inline style={{}} for ALL layout properties (display, gridTemplateColumns, flex, width, height).
 Tailwind is safe only for: colors (bg-*, text-*, border-*), spacing (p-*, m-*, gap-*), typography, borders.
 Always add p-4 at the root. Renders inside a full-width full-height overflow-auto container.
 
-Component must be named exactly `Layout`, no imports, no exports.
+TOOLTIPS — MANDATORY pattern (position:absolute is FORBIDDEN for tooltips — it gets clipped by overflow containers and breaks inside tables):
+  const [tipPos, setTipPos] = useState(null)
+  <trigger onMouseMove={e => setTipPos({x:e.clientX, y:e.clientY})} onMouseLeave={() => setTipPos(null)}>...</trigger>
+  {tipPos && <div style={{position:'fixed',left:tipPos.x+12,top:tipPos.y-28,zIndex:9999,pointerEvents:'none'}} className="bg-zinc-800 text-white text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap">{content}</div>}
+
+MANDATORY structure — you MUST decompose into at least 2 named functions:
+- Extract every repeating or distinct UI element into its own function (e.g. ThreadCard, TableRow, GroupHeader, SidePanel)
+- The main entry point MUST be named exactly `Layout`
+- Add `data-sc="FunctionName"` on the ROOT element of EVERY function (including Layout) — this is required for surgical editing
+- A single monolithic `function Layout` is NEVER acceptable
+- No imports, no exports
+
+Examples:
+  List/table layouts → ThreadCard or TableRow + Layout (and TableHeader if there's a header row)
+  Split-pane → ThreadListItem + DetailPanel + Layout
+  Heatmap/grid → GridCell + GridRow + Layout
+
+  function TableHeader() {
+    return <thead data-sc="TableHeader"><tr>...</tr></thead>
+  }
+  function TableRow({ thread }) {
+    return <tr data-sc="TableRow">...</tr>
+  }
+  function Layout({ threads }) {
+    return <div data-sc="Layout" className="p-4">
+      <table><TableHeader /><tbody>{threads.map(t => <TableRow key={t.id} thread={t} />)}</tbody></table>
+    </div>
+  }
 """
 
 
-def _make_patch_prompt(current_code: str) -> str:
-    return f"""You are a surgical code patcher. Apply the minimum change to an existing React component using find/replace patches.
-
-THE EXISTING COMPONENT:
-```jsx
-{current_code}
-```
-
-Return find/replace patches that together implement the requested change.
-
-RULES:
-1. "find" must be copied CHARACTER-FOR-CHARACTER from the component above — exact whitespace, exact indentation, exact newlines. Do not paraphrase.
-2. Each patch should be as small as possible — just the specific characters that need to change.
-3. Use 1–3 patches maximum.
-4. If new state is needed (e.g. for hover/tooltip), add it right after the opening line of the function. The find string for that patch should start with the character immediately after `function Layout({{ threads }}) {{`.
-5. For tooltips: use position:'fixed' with e.clientX/e.clientY from mouse events so the tooltip follows the cursor and never gets clipped.
-6. Available in scope (do NOT import): React, useState, useEffect, useMemo, formatDate, urgencyColor, groupThreads.
-
-Respond with valid JSON only — no markdown, no text outside the JSON:
-{{"action":"patch","message":"one sentence describing the change","patches":[{{"find":"exact string from code","replace":"replacement string"}}]}}
-
-If the request is too vague, respond:
-{{"action":"question","message":"your question","patches":[]}}
-"""
-
-
-def _apply_patches(code: str, patches: list[dict]) -> str | None:
+def _ensure_data_sc(code: str) -> str:
+    """Inject data-sc="FunctionName" on the root JSX element of each top-level function that is missing it."""
+    components = _parse_subcomponents(code)
     result = code
-    for patch in patches:
-        find = patch.get("find", "")
-        replace = patch.get("replace", "")
-        if not find or find not in result:
-            return None  # patch failed — find string not in code
-        result = result.replace(find, replace, 1)
+    for name, func_code in components.items():
+        attr = f'data-sc="{name}"'
+        if attr in func_code:
+            continue
+        # Find the first return statement that opens a JSX element
+        m = re.search(r'return\s*\(?\s*<([A-Za-z][A-Za-z0-9.]*)', func_code)
+        if not m:
+            continue
+        insert_at = m.end(1)
+        new_func = func_code[:insert_at] + f' data-sc="{name}"' + func_code[insert_at:]
+        result = result.replace(func_code, new_func, 1)
     return result
+
+
+def _parse_subcomponents(code: str) -> dict[str, str]:
+    """Extract top-level named function declarations from a React component string."""
+    functions: dict[str, str] = {}
+    lines = code.splitlines()
+    i = 0
+    while i < len(lines):
+        m = re.match(r'^function (\w+)\s*\(', lines[i])
+        if m:
+            name = m.group(1)
+            start = i
+            depth = 0
+            j = i
+            while j < len(lines):
+                depth += lines[j].count('{') - lines[j].count('}')
+                j += 1
+                if depth == 0 and j > start + 1:
+                    functions[name] = '\n'.join(lines[start:j])
+                    i = j
+                    break
+            else:
+                i += 1
+        else:
+            i += 1
+    return functions
+
+
+def _replace_subcomponent(code: str, name: str, new_func: str) -> str:
+    """Replace a named top-level function in the component code."""
+    lines = code.splitlines()
+    i = 0
+    while i < len(lines):
+        if re.match(r'^function ' + re.escape(name) + r'\s*\(', lines[i]):
+            start = i
+            depth = 0
+            j = i
+            while j < len(lines):
+                depth += lines[j].count('{') - lines[j].count('}')
+                j += 1
+                if depth == 0 and j > start + 1:
+                    return '\n'.join(lines[:start] + new_func.splitlines() + lines[j:])
+            break
+        i += 1
+    return code
+
+
+def _make_subcomponent_modify_prompt(components: dict[str, str], target: str | None) -> str:
+    if target and target in components:
+        component_section = f"Modify this sub-component:\n```jsx\n{components[target]}\n```"
+        return_instruction = (
+            f'{{"action":"component","name":"{target}","message":"one sentence","code":"function {target}..."}}\n'
+            f'Or if ambiguous: {{"action":"question","message":"your question"}}'
+        )
+    else:
+        sections = "\n\n".join(
+            f"[{name}]\n```jsx\n{func}\n```" for name, func in components.items()
+        )
+        component_section = f"The current component has these sub-components:\n\n{sections}"
+        return_instruction = (
+            '{"action":"component","name":"SubcomponentName","message":"one sentence","code":"function SubcomponentName..."}\n'
+            'Or if ambiguous: {"action":"question","message":"your question"}'
+        )
+
+    tooltip_rule = (
+        "- TOOLTIPS: ALWAYS use position:'fixed' and track mouse coords via onMouseMove — NEVER position:'absolute'."
+        " Absolute positioning breaks inside tables and gets clipped by overflow containers."
+        " Pattern: const [pos, setPos] = useState(null);"
+        " attach onMouseMove={e => setPos({x:e.clientX,y:e.clientY})} onMouseLeave={() => setPos(null)} to the trigger;"
+        " render {pos && <div style={{position:'fixed',left:pos.x+12,top:pos.y-28,zIndex:9999,pointerEvents:'none'}}"
+        " className=\"bg-zinc-800 text-white text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap\">content</div>}"
+    )
+    return (
+        "You are a surgical React component editor. Make the MINIMUM change to exactly one sub-component.\n\n"
+        + component_section
+        + "\n\nRULES:\n"
+        "- Preserve ALL existing logic, variable names, and styling not explicitly mentioned.\n"
+        "- Keep the `data-sc=\"ComponentName\"` attribute on the root element of the function you return.\n"
+        "- Do NOT redesign, reformat, or restyle anything not explicitly requested.\n"
+        "- Available in scope (do NOT import): React, useState, useEffect, useMemo, formatDate(iso), urgencyColor(score), groupThreads(threads, field)\n"
+        + tooltip_rule + "\n"
+        "- Return the COMPLETE modified function, not a snippet.\n\n"
+        "Return ONLY valid JSON — no markdown fences, no text outside JSON:\n"
+        + return_instruction
+    )
+
+
+_FIELD_LABELS: dict[str, str] = {
+    "subject": "Subject",
+    "sender": "Sender",
+    "sender_name": "From",
+    "preview": "Preview",
+    "project": "Project",
+    "urgency_score": "Priority",
+    "date": "Date",
+    "is_read": "Status",
+    "is_snoozed": "Snoozed",
+    "due_date": "Due",
+    "tags": "Tags",
+}
+
+
+def _cell_jsx(field: str) -> str:
+    """JSX for a table cell — matches CellValue in TableView.tsx exactly."""
+    if field == "urgency_score":
+        return '<span className={`px-1.5 py-0.5 rounded border text-xs ${urgencyColor(thread.urgency_score)}`}>{thread.urgency_score}</span>'
+    if field == "date":
+        return '<span className="text-zinc-500">{formatDate(thread.date)}</span>'
+    if field == "due_date":
+        return '<span className="text-zinc-500">{formatDate(thread.due_date)}</span>'
+    if field == "is_read":
+        return '<span className={thread.is_read ? "text-zinc-400" : "text-blue-600 font-medium"}>{thread.is_read ? "Read" : "Unread"}</span>'
+    if field == "project":
+        return '{thread.project ? <span className="bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded text-xs">{thread.project}</span> : <span className="text-zinc-400">—</span>}'
+    if field == "tags":
+        return '<div className="flex gap-1 flex-wrap">{(thread.tags || []).map(tag => <span key={tag} className="bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded text-xs">{tag}</span>)}</div>'
+    if field == "subject":
+        return '<span className={`truncate block max-w-xs ${!thread.is_read ? "font-semibold text-zinc-900" : "text-zinc-600"}`}>{thread.subject || "—"}</span>'
+    return f'<span className="text-zinc-700 truncate block max-w-xs">{{String(thread.{field} ?? "—")}}</span>'
+
+
+def _table_base_component(fields: list[str]) -> str:
+    label_ths = "\n        ".join(
+        f'<th className="text-left px-4 py-2 text-xs font-semibold text-zinc-500 uppercase tracking-wide">'
+        f'{_FIELD_LABELS.get(f, f)}</th>'
+        for f in fields
+    )
+    cell_tds = "\n      ".join(
+        f'<td className="px-4 py-2 max-w-xs">{_cell_jsx(f)}</td>'
+        for f in fields
+    )
+    return (
+        'function TableHeader() {\n'
+        '  return (\n'
+        '    <thead data-sc="TableHeader">\n'
+        '      <tr className="border-b border-zinc-200 bg-zinc-50">\n'
+        f'        {label_ths}\n'
+        '      </tr>\n'
+        '    </thead>\n'
+        '  )\n'
+        '}\n'
+        '\n'
+        'function TableRow({ thread }) {\n'
+        '  return (\n'
+        '    <tr data-sc="TableRow" className={`hover:bg-zinc-50 transition-colors ${!thread.is_read ? "bg-blue-50/30" : ""}`}>\n'
+        f'      {cell_tds}\n'
+        '    </tr>\n'
+        '  )\n'
+        '}\n'
+        '\n'
+        'function Layout({ threads }) {\n'
+        '  return (\n'
+        '    <div data-sc="Layout" className="overflow-x-auto">\n'
+        '      <table className="w-full text-sm">\n'
+        '        <TableHeader />\n'
+        '        <tbody className="divide-y divide-zinc-100">\n'
+        '          {threads.map(t => <TableRow key={t.id} thread={t} />)}\n'
+        '        </tbody>\n'
+        '      </table>\n'
+        '    </div>\n'
+        '  )\n'
+        '}'
+    )
+
+
+def _list_base_component(fields: list[str]) -> str:
+    meta_parts: list[str] = []
+    if "sender_name" in fields:
+        meta_parts.append('          <span className="text-xs text-zinc-500">{thread.sender_name}</span>')
+    if "project" in fields:
+        meta_parts.append('          {thread.project && <span className="text-xs bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded">{thread.project}</span>}')
+    if "due_date" in fields:
+        meta_parts.append('          {thread.due_date && <span className="text-xs text-orange-600">Due {formatDate(thread.due_date)}</span>}')
+    if "urgency_score" in fields:
+        meta_parts.append('          <span className={`text-xs px-1.5 py-0.5 rounded border ${urgencyColor(thread.urgency_score)}`}>{thread.urgency_score}</span>')
+    if "tags" in fields:
+        meta_parts.append(
+            '          {thread.tags && thread.tags.length > 0 && '
+            '<div className="flex gap-1">'
+            '{thread.tags.slice(0, 2).map(tag => '
+            '<span key={tag} className="text-xs bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded">{tag}</span>'
+            ')}</div>}'
+        )
+    meta_row = "\n".join(meta_parts)
+    preview = (
+        '\n        <p className="text-xs text-zinc-400 truncate mt-0.5">{thread.preview}</p>'
+        if "preview" in fields else ""
+    )
+    return (
+        'function ThreadCard({ thread }) {\n'
+        '  return (\n'
+        '    <div data-sc="ThreadCard" className={`flex gap-4 px-4 py-3 hover:bg-zinc-50 transition-colors ${!thread.is_read ? "bg-blue-50/40" : ""}`}>\n'
+        '      <div className="mt-1 flex-shrink-0">\n'
+        '        <div className={`w-2 h-2 rounded-full mt-1.5 ${!thread.is_read ? "bg-blue-500" : "bg-transparent"}`} />\n'
+        '      </div>\n'
+        '      <div className="flex-1 min-w-0">\n'
+        '        <div className="flex items-baseline justify-between gap-2">\n'
+        '          <span className={`text-sm truncate ${!thread.is_read ? "font-semibold text-zinc-900" : "text-zinc-700"}`}>\n'
+        '            {thread.subject}\n'
+        '          </span>\n'
+        '          <span className="text-xs text-zinc-400 flex-shrink-0">{formatDate(thread.date)}</span>\n'
+        '        </div>\n'
+        '        <div className="flex items-center gap-2 mt-0.5">\n'
+        f'{meta_row}\n'
+        '        </div>'
+        f'{preview}\n'
+        '      </div>\n'
+        '    </div>\n'
+        '  )\n'
+        '}\n'
+        '\n'
+        'function Layout({ threads }) {\n'
+        '  return (\n'
+        '    <div data-sc="Layout" className="flex flex-col divide-y divide-zinc-100">\n'
+        '      {threads.map(t => <ThreadCard key={t.id} thread={t} />)}\n'
+        '    </div>\n'
+        '  )\n'
+        '}'
+    )
+
+
+def _schema_to_base_component(schema) -> str | None:
+    """Deterministically generate a JSX component that exactly matches schema-rendered output."""
+    fields = schema.card_fields or ["subject", "sender_name"]
+    if schema.layout == "table":
+        return _table_base_component(fields)
+    if schema.layout == "list":
+        return _list_base_component(fields)
+    return None
 
 
 def _parse_response(raw: str) -> dict:
@@ -391,11 +635,55 @@ async def chat(body: ChatRequest):
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
 
     if body.current_code:
-        # Patch path: ask Claude for find/replace patches, apply them ourselves
+        # Decomposition path: parse sub-components, modify only the relevant one
+        components = _parse_subcomponents(body.current_code)
+
+        # Legacy monolithic component (no sub-components) — can't surgically edit it
+        if len(components) <= 1:
+            return {
+                "action": "question",
+                "message": "This component was generated without sub-components, so I can't make surgical edits. Ask me to regenerate the layout from scratch with your changes included.",
+                "schema": None,
+                "code": None,
+            }
+
+        # Structural components (layout skeleton only) — not useful as a surgical target;
+        # treat as no-target so Claude sees all sub-components and picks the right one.
+        _STRUCTURAL = {"TableHeader", "Layout"}
+
+        # Extract [SubcomponentName] from the last user message if present (from inspect context)
+        last_message = messages[-1]["content"] if messages else ""
+        target_match = re.search(r'\[(\w+)\]', last_message)
+        target = target_match.group(1) if target_match else None
+        if target and (target not in components or target in _STRUCTURAL):
+            target = None
+
+        # No inspect context on this message — check recent history for the last useful target
+        # (handles follow-up messages where the user is clearly continuing the previous edit)
+        if not target:
+            for msg in reversed(messages[:-1]):
+                m = re.search(r'\[(\w+)\]', msg.get("content", ""))
+                if m and m.group(1) in components and m.group(1) not in _STRUCTURAL:
+                    target = m.group(1)
+                    break
+
+        # Still no target — ask the user to use inspect
+        if not target:
+            return {
+                "action": "question",
+                "message": (
+                    "To edit a specific part of the layout, use Inspect mode: click the magnifier button, "
+                    "hover over the element you want to change, click it, then describe what you want. "
+                    "Or ask me to regenerate the whole layout from scratch with your changes included."
+                ),
+                "schema": None,
+                "code": None,
+            }
+
         raw = get_anthropic().messages.create(
             model="claude-sonnet-4-6",
             max_tokens=2048,
-            system=_make_patch_prompt(body.current_code),
+            system=_make_subcomponent_modify_prompt(components, target),
             messages=messages,
         ).content[0].text.strip()
 
@@ -404,20 +692,44 @@ async def chat(body: ChatRequest):
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"JSON parse error: {e}\nRaw: {raw}")
 
-        if parsed.get("action") == "patch":
-            patched = _apply_patches(body.current_code, parsed.get("patches", []))
-            if patched:
-                return {"action": "component", "message": parsed["message"], "schema": None, "code": patched}
-            # Patches failed — fall through to full regeneration below
+        if parsed.get("action") == "component":
+            func_name = parsed.get("name", "")
+            new_func = parsed.get("code", "")
+            if func_name and new_func and func_name in components:
+                stitched = _ensure_data_sc(_replace_subcomponent(body.current_code, func_name, new_func))
+                return {"action": "component", "message": parsed["message"], "schema": None, "code": stitched}
+            return {
+                "action": "question",
+                "message": "I couldn't match the change to the right sub-component. Click Inspect, select the exact element, and try again.",
+                "schema": None,
+                "code": None,
+            }
         elif parsed.get("action") == "question":
             return {"action": "question", "message": parsed["message"], "schema": None, "code": None}
 
-        # Fallback: full regeneration using the generation prompt
-        messages = [{"role": "user", "content": f"Current component:\n```jsx\n{body.current_code}\n```\n\n{messages[0]['content']}"}] + messages[1:]
+        return {
+            "action": "question",
+            "message": "I wasn't sure how to apply that change safely. Use Inspect to select the exact element you'd like to modify.",
+            "schema": None,
+            "code": None,
+        }
 
     else:
-        # Generation path
-        context = f"Current schema:\n{body.current_schema.model_dump_json(indent=2)}"
+        # Generation path — give Claude a deterministic base if the layout is table or list
+        base = _schema_to_base_component(body.current_schema)
+        if base:
+            context = (
+                f"Current schema:\n{body.current_schema.model_dump_json(indent=2)}\n\n"
+                f"The following base component already matches the current layout pixel-for-pixel. "
+                f"Start from it — do NOT redesign or restyle it. Add ONLY what the user asks for, nothing more:\n"
+                f"```jsx\n{base}\n```"
+            )
+        else:
+            context = (
+                f"Current schema (the user's active layout — if you generate a component, "
+                f"visually replicate this layout first then layer in the requested change):\n"
+                f"{body.current_schema.model_dump_json(indent=2)}"
+            )
         if messages:
             messages = [{"role": "user", "content": context + "\n\n" + messages[0]["content"]}] + messages[1:]
 
@@ -433,11 +745,12 @@ async def chat(body: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"JSON parse error: {e}\nRaw: {raw}")
 
+    raw_code = parsed.get("code")
     result: dict = {
         "action": parsed.get("action", "question"),
         "message": parsed.get("message", ""),
         "schema": None,
-        "code": parsed.get("code"),
+        "code": _ensure_data_sc(raw_code) if raw_code else None,
     }
 
     if parsed.get("action") == "schema" and parsed.get("schema"):
