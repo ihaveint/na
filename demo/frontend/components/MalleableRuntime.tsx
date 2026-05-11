@@ -6,7 +6,9 @@ import ListView from "./layouts/ListView"
 import KanbanView from "./layouts/KanbanView"
 import TableView from "./layouts/TableView"
 import DynamicView from "./DynamicView"
-import ChatPanel, { type ChatMessage } from "./ChatPanel"
+import ChatModal from "./ChatModal"
+import InspectOverlay from "./InspectOverlay"
+import type { ChatMessage } from "./ChatPanel"
 
 const API = "http://localhost:8000"
 
@@ -27,9 +29,10 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
   const [componentCode, setComponentCode] = useState<string | null>(null)
   const [showCode, setShowCode] = useState(false)
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
+  const [inspectMode, setInspectMode] = useState(false)
+  const [inspectContext, setInspectContext] = useState<string | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const isFirstRender = useRef(true)
-  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return }
@@ -45,10 +48,11 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
       .catch(() => setLoading(false))
   }, [schema.data_source])
 
-  // Reset conversation when switching personas (schema changes from outside)
   useEffect(() => {
     setChatHistory([])
     setComponentCode(null)
+    setInspectContext(null)
+    setInspectMode(false)
   }, [schema])
 
   const displayed = applySchema(threads, schema)
@@ -79,8 +83,7 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
       onSchemaChange(newSchema)
       blurIn()
       setPrompt("")
-      setJustApplied(true)
-      setTimeout(() => setJustApplied(false), 1500)
+      flash()
     } catch (e) {
       alert(`Error: ${e}`)
     } finally {
@@ -88,13 +91,10 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
     }
   }
 
-  async function handleComponentGenerate() {
-    if (!prompt.trim()) return
-
-    const userMessage: ChatMessage = { role: "user", content: prompt }
+  async function handleComponentSend(message: string) {
+    const userMessage: ChatMessage = { role: "user", content: message }
     const nextHistory = [...chatHistory, userMessage]
     setChatHistory(nextHistory)
-    setPrompt("")
     setApplying(true)
 
     try {
@@ -119,38 +119,37 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
       if (data.action === "component" && data.code) {
         setComponentCode(data.code)
         blurIn()
-        setJustApplied(true)
-        setTimeout(() => setJustApplied(false), 1500)
+        flash()
       }
     } catch (e) {
       alert(`Error: ${e}`)
     } finally {
       setApplying(false)
-      setTimeout(() => inputRef.current?.focus(), 0)
     }
   }
 
-  function handleGenerate() {
-    if (mode === "schema") handleSchemaGenerate()
-    else handleComponentGenerate()
+  function flash() {
+    setJustApplied(true)
+    setTimeout(() => setJustApplied(false), 1500)
   }
 
-  function resetCodeMode() {
-    setChatHistory([])
-    setComponentCode(null)
+  function handleElementClick(context: string) {
+    setInspectMode(false)
+    setInspectContext(context)
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* top bar */}
+    <div className="flex flex-col h-full relative">
+      {/* Top bar */}
       <div className={`
-        px-4 py-2.5 border-b flex items-center gap-2 flex-wrap bg-zinc-50
+        px-4 py-2.5 border-b flex items-center gap-2 flex-wrap bg-zinc-50 flex-shrink-0
         transition-all duration-500
         ${justApplied ? "border-violet-400 bg-violet-50" : "border-zinc-200"}
       `}>
+        {/* Mode toggle */}
         <div className="flex items-center rounded-lg border border-zinc-200 overflow-hidden text-xs font-semibold">
           <button
-            onClick={() => setMode("schema")}
+            onClick={() => { setMode("schema"); setInspectMode(false) }}
             className={`px-3 py-1.5 transition-colors ${mode === "schema" ? "bg-violet-600 text-white" : "text-zinc-500 hover:bg-zinc-100"}`}
           >
             Schema
@@ -175,8 +174,23 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
           </>
         ) : (
           <>
-            {componentCode ? (
+            {componentCode && (
               <>
+                {/* Inspect toggle */}
+                <button
+                  onClick={() => setInspectMode((v) => !v)}
+                  title="Click any element to chat about it"
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                    inspectMode
+                      ? "bg-violet-600 text-white border-violet-600"
+                      : "text-zinc-500 border-zinc-200 hover:bg-zinc-100"
+                  }`}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                  </svg>
+                  {inspectMode ? "Inspecting…" : "Inspect"}
+                </button>
                 <button
                   onClick={() => setShowCode((v) => !v)}
                   className="text-xs text-violet-600 hover:underline"
@@ -184,14 +198,12 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
                   {showCode ? "Hide code" : "View code"}
                 </button>
                 <button
-                  onClick={resetCodeMode}
+                  onClick={() => { setChatHistory([]); setComponentCode(null); setInspectContext(null); setInspectMode(false) }}
                   className="text-xs text-zinc-400 hover:text-zinc-600 hover:underline"
                 >
                   Reset
                 </button>
               </>
-            ) : (
-              <span className="text-xs text-zinc-400">Describe a layout to get started</span>
             )}
           </>
         )}
@@ -202,18 +214,15 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
         </span>
       </div>
 
-      {/* code panel */}
+      {/* Generated code panel */}
       {mode === "code" && showCode && componentCode && (
-        <div className="border-b border-zinc-200 bg-zinc-950 text-zinc-300 text-xs font-mono p-4 max-h-64 overflow-auto">
+        <div className="border-b border-zinc-200 bg-zinc-950 text-zinc-300 text-xs font-mono p-4 max-h-64 overflow-auto flex-shrink-0">
           <pre className="whitespace-pre-wrap">{componentCode}</pre>
         </div>
       )}
 
-      {/* chat history (code mode only) */}
-      {mode === "code" && <ChatPanel messages={chatHistory} />}
-
-      {/* content */}
-      <div ref={contentRef} className="flex-1 overflow-auto">
+      {/* Content area */}
+      <div ref={contentRef} className="flex-1 overflow-auto relative min-h-0">
         {loading ? (
           <div className="flex items-center justify-center h-full text-zinc-400 text-sm">Loading…</div>
         ) : mode === "code" ? (
@@ -222,8 +231,13 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
           ) : (
             <div className="flex items-center justify-center h-full text-center px-8">
               <div>
-                <p className="text-zinc-500 text-sm font-medium mb-1">No component yet</p>
-                <p className="text-zinc-400 text-xs">Describe what you want below — the agent will ask follow-up questions if it needs more detail.</p>
+                <div className="w-10 h-10 rounded-full bg-violet-100 flex items-center justify-center mx-auto mb-3">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
+                </div>
+                <p className="text-zinc-600 text-sm font-medium mb-1">Chat with the agent</p>
+                <p className="text-zinc-400 text-xs">Tap the button below to describe a layout. The agent will ask follow-up questions if it needs more detail.</p>
               </div>
             </div>
           )
@@ -234,34 +248,46 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
         ) : (
           <ListView threads={displayed} schema={schema} />
         )}
+
+        {/* Inspect overlay — sits over content area */}
+        {mode === "code" && (
+          <InspectOverlay active={inspectMode} onElementClick={handleElementClick} />
+        )}
       </div>
 
-      {/* prompt bar */}
-      <div className="border-t border-zinc-200 px-4 py-3 bg-white">
-        <div className="flex gap-2">
-          <input
-            ref={inputRef}
-            className="flex-1 text-sm text-zinc-900 border border-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400 placeholder:text-zinc-400"
-            placeholder={
-              mode === "schema"
-                ? 'Try "show as kanban grouped by project" or "sort by urgency"…'
-                : chatHistory.length === 0
-                ? 'Describe a layout — e.g. "heatmap", "timeline", "split pane with preview"…'
-                : "Reply to continue the conversation…"
-            }
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !applying && handleGenerate()}
-          />
-          <button
-            onClick={handleGenerate}
-            disabled={applying || !prompt.trim()}
-            className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-w-[80px]"
-          >
-            {applying ? "Thinking…" : "Send"}
-          </button>
+      {/* Schema mode prompt bar */}
+      {mode === "schema" && (
+        <div className="border-t border-zinc-200 px-4 py-3 bg-white flex-shrink-0">
+          <div className="flex gap-2">
+            <input
+              className="flex-1 text-sm text-zinc-900 border border-zinc-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400 placeholder:text-zinc-400"
+              placeholder='Try "show as kanban grouped by project" or "sort by urgency"…'
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !applying && handleSchemaGenerate()}
+            />
+            <button
+              onClick={handleSchemaGenerate}
+              disabled={applying || !prompt.trim()}
+              className="px-4 py-2 bg-violet-600 text-white text-sm font-medium rounded-lg hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-w-[80px]"
+            >
+              {applying ? "Applying…" : "Apply"}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Floating chat button + modal (Code mode only) */}
+      {mode === "code" && (
+        <ChatModal
+          messages={chatHistory}
+          applying={applying}
+          hasComponent={!!componentCode}
+          inspectContext={inspectContext}
+          onClearInspectContext={() => setInspectContext(null)}
+          onSend={handleComponentSend}
+        />
+      )}
     </div>
   )
 }
