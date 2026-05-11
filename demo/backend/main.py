@@ -167,78 +167,104 @@ async def generate_schema(body: GenerateSchemaRequest):
 # Component generation — AI agent writes a React component from scratch
 # ---------------------------------------------------------------------------
 
-_COMPONENT_SYSTEM_PROMPT = """You are a React component generation agent for a N/A email client.
+_COMPONENT_SYSTEM_PROMPT = """You are a conversational UI generation agent for a N/A email client.
 
-Your job is to generate a React functional component that displays email thread data in EXACTLY the visual layout the user describes. Take the request literally — if they say heatmap, build a heatmap grid. If they say timeline, build a vertical or horizontal timeline. If they say split-pane, build a two-panel layout. Do NOT fall back to a plain list.
+Your job is to have a conversation with the user to understand what layout they want, ask clarifying questions when needed, and then generate a React component.
+
+RESPONSE FORMAT — always respond with valid JSON, no markdown fences:
+  {"action": "question", "message": "...", "code": null}
+  {"action": "component", "message": "...", "code": "function Layout({ threads }) { ... }"}
+
+When to use "question":
+- The layout type is vague ("show it differently", "make it nicer")
+- Key parameters are unspecified for the requested layout type:
+    heatmap → need to know both axes
+    timeline → need to know sort field and what to display per entry
+    split-pane → need to know what goes in each pane
+    activity grid → need to know the metric and time dimension
+- Ask ONE focused question at a time. Be concise and friendly.
+
+When to use "component":
+- You have enough information to build exactly what the user wants
+- The user is making a specific modification to an existing component (current_code is provided)
+- The layout type and its key parameters are clear from the conversation
+
+When generating, "message" should be a single short sentence describing what you built.
+
+--- COMPONENT RULES ---
 
 The component receives one prop:
   threads: Thread[]
 
-Each Thread has these fields:
-  id: string
-  subject: string
-  sender: string
-  sender_name: string
-  preview: string
-  project: string | null
-  urgency_score: number  (0–100, higher = more urgent)
-  date: string           (ISO datetime)
-  is_read: boolean
-  is_snoozed: boolean
-  due_date: string | null  (ISO datetime)
-  tags: string[]
+Each Thread has:
+  id, subject, sender, sender_name, preview, project (string|null),
+  urgency_score (0–100), date (ISO string), is_read (bool),
+  is_snoozed (bool), due_date (ISO string|null), tags (string[])
 
-These are already in scope — do NOT import them:
+Already in scope — do NOT import:
   React, useState, useEffect, useMemo
-  formatDate(iso: string | null) → string   e.g. "Today", "Yesterday", "Mon", "Jan 5"
-  urgencyColor(score: number) → string      Tailwind classes for a colored badge (e.g. "bg-red-100 text-red-700 border-red-200")
-  groupThreads(threads, groupBy: string) → Record<string, Thread[]>
+  formatDate(iso) → string  (e.g. "Today", "Jan 5")
+  urgencyColor(score) → string  (Tailwind classes, e.g. "bg-red-100 text-red-700 border-red-200")
+  groupThreads(threads, field) → Record<string, Thread[]>
 
-Styling rules — READ CAREFULLY:
-- This app uses Tailwind CSS compiled at build time. Only classes already present in the source are available.
-- CRITICAL: For any grid or flex LAYOUT properties (grid-template-columns, column counts, flex-basis, etc.) you MUST use inline style={{}} props, NOT Tailwind classes. e.g. style={{ display: 'grid', gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}
-- Tailwind IS safe to use for: colors (bg-*, text-*, border-*), spacing (p-*, m-*, gap-*), typography (text-sm, font-bold), borders (rounded-*, border), and overflow (overflow-auto, overflow-hidden).
-- Always add padding (p-4 or similar) at the root element so content is not flush against the edge.
-- The component renders inside a flex-1 overflow-auto container that is full width and full height.
+Styling — CRITICAL:
+- Use inline style={{}} for ALL layout properties: display, gridTemplateColumns, flex, width, height, gridTemplateRows, etc.
+- Tailwind is safe for: colors (bg-*, text-*, border-*), spacing (p-*, m-*, gap-*), typography, borders, overflow.
+- Always add p-4 or similar at the root so content is not flush against the edge.
+- The component renders inside a full-width full-height flex-1 overflow-auto container.
 
-Layout guidance by type:
-- Heatmap: CSS grid via inline style, rows = one dimension (e.g. sender), columns = another (e.g. urgency bucket), cells colored by intensity using bg-* Tailwind classes
-- Timeline: vertical list with a left-side time axis line, entries positioned via margin/padding
-- Split-pane: two side-by-side divs via inline style={{ display: 'flex' }}, use useState to track selected item
-- Swimlane: horizontal scrolling rows via inline style, one per group, cards inside each row
-- Activity grid: GitHub-style squares in a grid via inline style, colored by metric
+Layout guidance:
+- Heatmap: grid via inline style, rows = one dimension, columns = another, cells bg-colored by count/intensity
+- Timeline: vertical axis on the left, dated entries with connecting line
+- Split-pane: two side-by-side divs via inline style, useState for selected item
+- Swimlane: horizontal rows via inline style, one per group, cards inside
+- Activity grid: GitHub-style squares via inline style, colored by metric
 
-Rules:
-- Output ONLY the component code. No imports, no exports, no markdown fences.
-- The component MUST be named exactly `Layout`.
-- Start with: function Layout({ threads }) {
-- End with the closing: }
-- Keep it self-contained. No external dependencies beyond what's listed above.
+Component format:
+- Named exactly `Layout`
+- Starts with: function Layout({ threads }) {
+- Ends with the closing: }
+- No imports, no exports
 """
 
 
 @app.post("/generate-component")
 async def generate_component(body: GenerateComponentRequest):
-    if body.current_code:
-        user_content = (
-            f"Current component:\n```jsx\n{body.current_code}\n```\n\n"
-            f"Modification request: {body.user_message}"
-        )
-    else:
-        user_content = body.user_message
+    messages = [{"role": m.role, "content": m.content} for m in body.messages]
+
+    # Prepend current code context to the first user message if we have it
+    if body.current_code and messages:
+        messages = [
+            {
+                "role": "user",
+                "content": (
+                    f"[Current component code for reference]\n```jsx\n{body.current_code}\n```\n\n"
+                    f"{messages[0]['content']}"
+                ),
+            }
+        ] + messages[1:]
 
     response = get_anthropic().messages.create(
         model="claude-sonnet-4-6",
         max_tokens=4096,
         system=_COMPONENT_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_content}],
+        messages=messages,
     )
 
-    code = response.content[0].text.strip()
-    # Strip markdown code fences if Claude wrapped the output
-    if code.startswith("```"):
-        code = "\n".join(code.split("\n")[1:])
-    if code.endswith("```"):
-        code = "\n".join(code.split("\n")[:-1])
+    raw = response.content[0].text.strip()
+    # Strip markdown fences if Claude wrapped the JSON
+    if raw.startswith("```"):
+        raw = "\n".join(raw.split("\n")[1:])
+    if raw.endswith("```"):
+        raw = "\n".join(raw.split("\n")[:-1])
 
-    return {"code": code.strip()}
+    try:
+        parsed = json.loads(raw.strip())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"JSON parse error: {e}\nRaw: {raw}")
+
+    return {
+        "action": parsed.get("action", "component"),
+        "message": parsed.get("message", ""),
+        "code": parsed.get("code"),
+    }

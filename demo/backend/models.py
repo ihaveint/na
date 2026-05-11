@@ -46,6 +46,11 @@ class GenerateSchemaRequest(BaseModel):
     current_schema: UISchema
 
 
+class ConversationMessage(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+
+
 class GenerateComponentRequest(BaseModel):
-    user_message: str
+    messages: list[ConversationMessage]
     current_code: Optional[str] = None
