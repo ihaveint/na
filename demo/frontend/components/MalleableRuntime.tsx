@@ -58,13 +58,16 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
 
   function blurIn() {
     setTimeout(() => {
-      contentRef.current?.animate(
+      const anim = contentRef.current?.animate(
         [
           { opacity: 0, filter: "blur(8px)", transform: "scale(1.02)" },
           { opacity: 1, filter: "blur(0px)", transform: "scale(1)" },
         ],
         { duration: 400, easing: "cubic-bezier(0.16, 1, 0.3, 1)", fill: "both" }
       )
+      // Cancel after finish so transform/filter don't persist on the div.
+      // Both create a new stacking context that breaks position:fixed children (the inspect overlay).
+      if (anim) anim.onfinish = () => anim.cancel()
     }, 0)
   }
 
