@@ -389,10 +389,15 @@ async def chat(body: ChatRequest):
     )
 
     raw = response.content[0].text.strip()
+    # Strip markdown fences
     if raw.startswith("```"):
         raw = "\n".join(raw.split("\n")[1:])
     if raw.endswith("```"):
         raw = "\n".join(raw.split("\n")[:-1])
+    # Find the JSON object even if Claude prepended explanatory text
+    start = raw.find("{")
+    if start > 0:
+        raw = raw[start:]
 
     try:
         parsed = json.loads(raw.strip())
