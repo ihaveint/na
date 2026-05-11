@@ -338,27 +338,53 @@ Component must be named exactly `Layout`, no imports, no exports.
 """
 
 
+def _make_modify_prompt(current_code: str) -> str:
+    return f"""You are a surgical code editor. Your only job is to apply the smallest possible change to an existing React component.
+
+THE EXISTING COMPONENT (do not change anything not explicitly requested):
+```jsx
+{current_code}
+```
+
+RULES — read carefully:
+1. Copy the component above exactly, character for character.
+2. Apply ONLY the specific change the user requests. Nothing else.
+3. Do not rename variables, reformat code, change styling, restructure logic, or alter any line that is not directly involved in the requested change.
+4. If the change requires hover state, use useState (already in scope). Example pattern for a tooltip:
+   const [hovered, setHovered] = useState(null)
+   ...onMouseEnter={{() => setHovered(id)}} onMouseLeave={{() => setHovered(null)}}
+   {{hovered === id && <div style={{position:'absolute', ...}}>tooltip content</div>}}
+5. For absolutely-positioned tooltips, the parent element needs style={{position:'relative'}}.
+
+Respond with valid JSON only (no markdown):
+{{"action":"component","message":"one sentence describing only what changed","code":"function Layout({{ threads }}) {{ ... }}"}}
+
+If the request is too vague to act on, respond:
+{{"action":"question","message":"your clarifying question","code":null}}
+"""
+
+
 @app.post("/chat")
 async def chat(body: ChatRequest):
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
 
-    # Inject current state into the first user message as context
-    context_parts = [f"Current schema:\n{body.current_schema.model_dump_json(indent=2)}"]
     if body.current_code:
-        context_parts.append(f"Current component code:\n```jsx\n{body.current_code}\n```")
-
-    if messages:
-        messages = [
-            {
-                "role": "user",
-                "content": "\n\n".join(context_parts) + "\n\n" + messages[0]["content"],
-            }
-        ] + messages[1:]
+        # Modification path: dedicated surgical-edit prompt with code baked into system prompt
+        system = _make_modify_prompt(body.current_code)
+        # No extra context prepended — the code is already in the system prompt
+    else:
+        # Generation path: full chat prompt with schema context
+        system = _CHAT_SYSTEM_PROMPT
+        context = f"Current schema:\n{body.current_schema.model_dump_json(indent=2)}"
+        if messages:
+            messages = [
+                {"role": "user", "content": context + "\n\n" + messages[0]["content"]}
+            ] + messages[1:]
 
     response = get_anthropic().messages.create(
         model="claude-sonnet-4-6",
         max_tokens=4096,
-        system=_CHAT_SYSTEM_PROMPT,
+        system=system,
         messages=messages,
     )
 
