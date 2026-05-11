@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from malleable import semantic, generate_manifest
-from models import Thread, SnoozeRequest, TagRequest, UISchema, GenerateSchemaRequest
+from models import Thread, SnoozeRequest, TagRequest, UISchema, GenerateSchemaRequest, GenerateComponentRequest
 from data import THREADS, THREADS_BY_ID
 
 load_dotenv()
@@ -161,3 +161,73 @@ async def generate_schema(body: GenerateSchemaRequest):
         return UISchema(**parsed)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Schema parse error: {e}\nRaw: {raw}")
+
+
+# ---------------------------------------------------------------------------
+# Component generation — AI agent writes a React component from scratch
+# ---------------------------------------------------------------------------
+
+_COMPONENT_SYSTEM_PROMPT = """You are a React component generation agent for a malleable email client.
+
+Generate a React functional component that displays email thread data in whatever layout the user requests.
+
+The component receives one prop:
+  threads: Thread[]
+
+Each Thread has these fields:
+  id: string
+  subject: string
+  sender: string
+  sender_name: string
+  preview: string
+  project: string | null
+  urgency_score: number  (0–100, higher = more urgent)
+  date: string           (ISO datetime)
+  is_read: boolean
+  is_snoozed: boolean
+  due_date: string | null  (ISO datetime)
+  tags: string[]
+
+These are already in scope — do NOT import them:
+  React, useState, useEffect, useMemo
+  formatDate(iso: string | null) → string   e.g. "Today", "Yesterday", "Mon", "Jan 5"
+  urgencyColor(score: number) → string      Tailwind classes for a colored badge
+  groupThreads(threads, groupBy: string) → Record<string, Thread[]>
+
+Styling: Tailwind CSS only. The component renders inside a flex-1 overflow-auto container.
+
+Rules:
+- Output ONLY the component code. No imports, no exports, no markdown fences.
+- The component MUST be named exactly `Layout`.
+- Start with: function Layout({ threads }) {
+- End with the closing: }
+- Be creative — timelines, heatmaps, activity grids, split-pane, swimlanes — anything goes.
+- Keep it self-contained. No external dependencies beyond what's listed above.
+"""
+
+
+@app.post("/generate-component")
+async def generate_component(body: GenerateComponentRequest):
+    if body.current_code:
+        user_content = (
+            f"Current component:\n```jsx\n{body.current_code}\n```\n\n"
+            f"Modification request: {body.user_message}"
+        )
+    else:
+        user_content = body.user_message
+
+    response = get_anthropic().messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=4096,
+        system=_COMPONENT_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_content}],
+    )
+
+    code = response.content[0].text.strip()
+    # Strip markdown code fences if Claude wrapped the output
+    if code.startswith("```"):
+        code = "\n".join(code.split("\n")[1:])
+    if code.endswith("```"):
+        code = "\n".join(code.split("\n")[:-1])
+
+    return {"code": code.strip()}

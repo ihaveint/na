@@ -44,3 +44,8 @@ class UISchema(BaseModel):
 class GenerateSchemaRequest(BaseModel):
     user_message: str
     current_schema: UISchema
+
+
+class GenerateComponentRequest(BaseModel):
+    user_message: str
+    current_code: Optional[str] = None
