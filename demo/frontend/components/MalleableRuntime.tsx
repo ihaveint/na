@@ -144,20 +144,6 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
           <>
             <span className="text-xs font-semibold px-2 py-0.5 rounded bg-violet-100 text-violet-700">custom</span>
             <button
-              onClick={() => setInspectMode((v) => !v)}
-              title="Click any element to chat about it"
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                inspectMode
-                  ? "bg-violet-600 text-white border-violet-600"
-                  : "text-zinc-500 border-zinc-200 hover:bg-zinc-100"
-              }`}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-              </svg>
-              {inspectMode ? "Inspecting…" : "Inspect"}
-            </button>
-            <button
               onClick={() => setShowCode((v) => !v)}
               className="text-xs text-violet-600 hover:underline"
             >
@@ -177,6 +163,22 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
             </button>
           </>
         )}
+
+        {/* Inspect toggle — always visible */}
+        <button
+          onClick={() => setInspectMode((v) => !v)}
+          title="Click any element to chat about it"
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+            inspectMode
+              ? "bg-violet-600 text-white border-violet-600"
+              : "text-zinc-500 border-zinc-200 hover:bg-zinc-100"
+          }`}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          {inspectMode ? "Inspecting…" : "Inspect"}
+        </button>
 
         <span className="ml-auto text-xs text-zinc-400">{displayed.length} threads</span>
         <span className={`text-xs font-medium text-violet-600 transition-opacity duration-300 ${justApplied ? "opacity-100" : "opacity-0"}`}>
@@ -205,9 +207,7 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
           <ListView threads={displayed} schema={schema} />
         )}
 
-        {renderMode === "component" && (
-          <InspectOverlay active={inspectMode} onElementClick={handleElementClick} />
-        )}
+        <InspectOverlay active={inspectMode} onElementClick={handleElementClick} />
       </div>
 
       {/* Floating chat */}
