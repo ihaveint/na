@@ -54,3 +54,9 @@ class ConversationMessage(BaseModel):
 class GenerateComponentRequest(BaseModel):
     messages: list[ConversationMessage]
     current_code: Optional[str] = None
+
+
+class ChatRequest(BaseModel):
+    messages: list[ConversationMessage]
+    current_schema: UISchema
+    current_code: Optional[str] = None

@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from malleable import semantic, generate_manifest
-from models import Thread, SnoozeRequest, TagRequest, UISchema, GenerateSchemaRequest, GenerateComponentRequest
+from models import Thread, SnoozeRequest, TagRequest, UISchema, GenerateSchemaRequest, GenerateComponentRequest, ChatRequest
 from data import THREADS, THREADS_BY_ID
 
 load_dotenv()
@@ -268,3 +268,116 @@ async def generate_component(body: GenerateComponentRequest):
         "message": parsed.get("message", ""),
         "code": parsed.get("code"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Unified chat — single endpoint that decides schema vs component vs question
+# ---------------------------------------------------------------------------
+
+_CHAT_SYSTEM_PROMPT = """You are a conversational UI agent for a N/A email client. You help users customize how their email data is displayed by either updating a config schema or generating a custom React component.
+
+ALWAYS respond with valid JSON only — no markdown fences, no explanation outside the JSON:
+
+Schema update:    {"action":"schema",    "message":"...", "schema":{...}, "code":null}
+Component:        {"action":"component", "message":"...", "schema":null,  "code":"function Layout({ threads }) { ... }"}
+Clarifying question: {"action":"question",  "message":"...", "schema":null,  "code":null}
+
+--- WHEN TO USE EACH ---
+
+Use "schema" when the user wants:
+- A standard layout: list, kanban, table, calendar
+- Sorting, filtering, or grouping by a field
+- Changing visible fields or data source
+- Simple, well-defined presentation changes
+
+Use "component" when the user wants:
+- A layout not in the schema: heatmap, timeline, split-pane, activity grid, swimlane, or any novel visual
+- The current_code is already provided — ALWAYS use "component" to modify it, never revert to schema
+- Significant custom visual structure
+
+Use "question" when:
+- The request is too vague to act on ("make it better", "change it")
+- Key parameters are missing for the requested layout
+- Ask ONE focused question
+
+--- SCHEMA FORMAT ---
+
+UISchema:
+{
+  "layout": "list" | "kanban" | "table" | "calendar",
+  "data_source": "list_all" | "list_actionable",
+  "group_by": "<field>" | null,
+  "sort_by": "<field>" | null,
+  "sort_direction": "asc" | "desc",
+  "card_fields": ["subject", "sender_name", ...],
+  "filters": [{"field":"...","op":"eq|neq|gt|lt","value":"..."}],
+  "actions": ["MarkDone","SnoozeThread","TagProject"]
+}
+
+Thread fields: id, subject, sender, sender_name, preview, project, urgency_score (0-100), date (ISO), is_read, is_snoozed, due_date (ISO|null), tags (string[])
+Virtual group_by: urgency_bucket (Critical/Normal/Low), has_deadline (Has deadline/No deadline)
+Calendar requires sort_by="date" or "due_date". Kanban works best with group_by set.
+Always include at least ["subject","sender_name"] in card_fields.
+
+--- COMPONENT FORMAT ---
+
+Props: { threads: Thread[] }  (same fields as above)
+Already in scope — do NOT import: React, useState, useEffect, useMemo, formatDate(iso), urgencyColor(score), groupThreads(threads, field)
+
+CRITICAL styling: use inline style={{}} for ALL layout properties (display, gridTemplateColumns, flex, width, height).
+Tailwind is safe only for: colors (bg-*, text-*, border-*), spacing (p-*, m-*, gap-*), typography, borders.
+Always add p-4 at the root. Renders inside a full-width full-height overflow-auto container.
+
+Component must be named exactly `Layout`, no imports, no exports.
+"""
+
+
+@app.post("/chat")
+async def chat(body: ChatRequest):
+    messages = [{"role": m.role, "content": m.content} for m in body.messages]
+
+    # Inject current state into the first user message as context
+    context_parts = [f"Current schema:\n{body.current_schema.model_dump_json(indent=2)}"]
+    if body.current_code:
+        context_parts.append(f"Current component code:\n```jsx\n{body.current_code}\n```")
+
+    if messages:
+        messages = [
+            {
+                "role": "user",
+                "content": "\n\n".join(context_parts) + "\n\n" + messages[0]["content"],
+            }
+        ] + messages[1:]
+
+    response = get_anthropic().messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=4096,
+        system=_CHAT_SYSTEM_PROMPT,
+        messages=messages,
+    )
+
+    raw = response.content[0].text.strip()
+    if raw.startswith("```"):
+        raw = "\n".join(raw.split("\n")[1:])
+    if raw.endswith("```"):
+        raw = "\n".join(raw.split("\n")[:-1])
+
+    try:
+        parsed = json.loads(raw.strip())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"JSON parse error: {e}\nRaw: {raw}")
+
+    result: dict = {
+        "action": parsed.get("action", "question"),
+        "message": parsed.get("message", ""),
+        "schema": None,
+        "code": parsed.get("code"),
+    }
+
+    if parsed.get("action") == "schema" and parsed.get("schema"):
+        try:
+            result["schema"] = UISchema(**parsed["schema"]).model_dump()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Schema parse error: {e}")
+
+    return result
