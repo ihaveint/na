@@ -194,15 +194,19 @@ These are already in scope — do NOT import them:
   urgencyColor(score: number) → string      Tailwind classes for a colored badge (e.g. "bg-red-100 text-red-700 border-red-200")
   groupThreads(threads, groupBy: string) → Record<string, Thread[]>
 
-Styling: Tailwind CSS only. The component renders inside a flex-1 overflow-auto container that is full width and full height.
-Always add padding (p-4 or similar) at the root element so content is not flush against the edge.
+Styling rules — READ CAREFULLY:
+- This app uses Tailwind CSS compiled at build time. Only classes already present in the source are available.
+- CRITICAL: For any grid or flex LAYOUT properties (grid-template-columns, column counts, flex-basis, etc.) you MUST use inline style={{}} props, NOT Tailwind classes. e.g. style={{ display: 'grid', gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}
+- Tailwind IS safe to use for: colors (bg-*, text-*, border-*), spacing (p-*, m-*, gap-*), typography (text-sm, font-bold), borders (rounded-*, border), and overflow (overflow-auto, overflow-hidden).
+- Always add padding (p-4 or similar) at the root element so content is not flush against the edge.
+- The component renders inside a flex-1 overflow-auto container that is full width and full height.
 
 Layout guidance by type:
-- Heatmap: render a CSS grid where rows = one dimension (e.g. sender), columns = another (e.g. urgency bucket or day), cells colored by intensity
-- Timeline: vertical list of dated entries with a left-side time axis and connecting line
-- Split-pane: two side-by-side panels, use useState to track selected item in the left pane and show detail in the right
-- Swimlane: horizontal scrolling rows, one per group, cards inside each row
-- Activity grid: GitHub-style calendar squares colored by a metric
+- Heatmap: CSS grid via inline style, rows = one dimension (e.g. sender), columns = another (e.g. urgency bucket), cells colored by intensity using bg-* Tailwind classes
+- Timeline: vertical list with a left-side time axis line, entries positioned via margin/padding
+- Split-pane: two side-by-side divs via inline style={{ display: 'flex' }}, use useState to track selected item
+- Swimlane: horizontal scrolling rows via inline style, one per group, cards inside each row
+- Activity grid: GitHub-style squares in a grid via inline style, colored by metric
 
 Rules:
 - Output ONLY the component code. No imports, no exports, no markdown fences.
