@@ -689,7 +689,7 @@ async def chat(body: ChatRequest):
 
         raw = get_anthropic().messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=2048,
+            max_tokens=8096,
             system=_make_subcomponent_modify_prompt(components, target),
             messages=messages,
         ).content[0].text.strip()
