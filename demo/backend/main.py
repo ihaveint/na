@@ -279,7 +279,7 @@ _CHAT_SYSTEM_PROMPT_STATIC = """\
 ALWAYS respond with valid JSON only — no markdown fences, no explanation outside the JSON:
 
 Schema update:    {"action":"schema",    "message":"...", "schema":{...}, "code":null}
-Component:        {"action":"component", "message":"...", "schema":null,  "code":"function Layout({ threads, onItemClick }) { ... }"}
+Component:        {"action":"component", "message":"...", "schema":null,  "code":"function Layout({ items, onItemClick }) { ... }"}
 Clarifying question: {"action":"question",  "message":"...", "schema":null,  "code":null}
 
 --- WHEN TO USE EACH ---
@@ -328,12 +328,11 @@ Always include the primary display field in card_fields.
 
 --- COMPONENT FORMAT ---
 
-Props: { threads: Thread[], onItemClick: (item: Thread) => void }
+Props: { items: Entity[], onItemClick: (item: Entity) => void }
 Call onItemClick(item) when the user clicks a card/row/item to open its detail view. Always wire this up on clickable items.
-Already in scope — do NOT import: React, useState, useEffect, useMemo, formatDate(iso), urgencyColor(score), groupThreads(threads, field)
+Already in scope — do NOT import: React, useState, useEffect, useMemo, formatDate(iso), groupItems(items, field)
 
-urgencyColor(score) returns a STRING of Tailwind classes like "bg-red-100 text-red-700 border-red-200".
-Use it ONLY in className, never in style. Example: <span className={urgencyColor(thread.urgency_score)}>
+groupItems(items, field) groups an array by a field value and returns Record<string, Entity[]>.
 
 CRITICAL styling: use inline style={{}} for ALL layout properties (display, gridTemplateColumns, flex, width, height).
 Tailwind is safe only for: colors (bg-*, text-*, border-*), spacing (p-*, m-*, gap-*), typography, borders.
@@ -364,12 +363,12 @@ Examples:
   function TableHeader() {
     return <thead data-sc="TableHeader"><tr>...</tr></thead>
   }
-  function TableRow({ thread, onItemClick }) {
-    return <tr data-sc="TableRow" onClick={() => onItemClick(thread)}>...</tr>
+  function TableRow({ item, onItemClick }) {
+    return <tr data-sc="TableRow" onClick={() => onItemClick(item)}>...</tr>
   }
-  function Layout({ threads, onItemClick }) {
+  function Layout({ items, onItemClick }) {
     return <div data-sc="Layout" className="p-4">
-      <table><TableHeader /><tbody>{threads.map(t => <TableRow key={t.id} thread={t} onItemClick={onItemClick} />)}</tbody></table>
+      <table><TableHeader /><tbody>{items.map(t => <TableRow key={t.id} item={t} onItemClick={onItemClick} />)}</tbody></table>
     </div>
   }
 """
@@ -417,22 +416,12 @@ def _build_chat_system_prompt(manifest: dict) -> str:
     else:
         ds_lines = "  (no list endpoints found)"
 
-    # --- Virtual group_by fields (domain-agnostic examples from manifest) ---
-    # These are computed fields the schema can reference even though they're not stored.
-    # For now we list them statically; a future pass can derive them from annotations.
-    virtual_section = (
-        "Virtual group_by fields (computed, not stored — include when relevant):\n"
-        "  urgency_bucket — Critical / Normal / Low  (derived from urgency_score if present)\n"
-        "  has_deadline   — Has deadline / No deadline  (derived from due_date if present)"
-    )
-
     intro = (
         f"You are a conversational UI agent. "
         f"You help users customize how their data is displayed by updating a config schema "
         f"or generating a custom React component.\n\n"
         f"--- DATA MODEL ---\n\n"
         f"{entity_section}\n\n"
-        f"{virtual_section}\n\n"
         f"Valid data_source values (use the exact intent string):\n{ds_lines}"
     )
 
@@ -538,8 +527,8 @@ def _make_subcomponent_modify_prompt(components: dict[str, str], target: str | N
         "- Keep the `data-sc=\"ComponentName\"` attribute on the root element of every function you return.\n"
         "- Do NOT redesign, reformat, or restyle anything not explicitly requested.\n"
         "- PROP DRILLING: If adding a new prop to a child component, you MUST also update every parent that renders it to pass that prop through. Include all affected components in your changes array.\n"
-        "- Available in scope (do NOT import): React, useState, useEffect, useMemo, formatDate(iso), urgencyColor(score), groupThreads(threads, field)\n"
-        "- Layout receives two props: `threads` (array) and `onItemClick(item)` (function). Call `onItemClick(item)` when the user clicks a card/row/item to open its detail view. Always wire this up on clickable items.\n"
+        "- Available in scope (do NOT import): React, useState, useEffect, useMemo, formatDate(iso), groupItems(items, field)\n"
+        "- Layout receives two props: `items` (array) and `onItemClick(item)` (function). Call `onItemClick(item)` when the user clicks a card/row/item to open its detail view. Always wire this up on clickable items.\n"
         + tooltip_rule + "\n"
         "- BORDER RADIUS: always use inline style={{borderRadius:'1rem'}} NOT Tailwind rounded-* classes. Tailwind rounded-* is unreliable in generated components.\n"
         "- UNDEFINED REFERENCES: every function/component you call or render MUST be defined in your output. If you reference <Foo />, Foo must appear as a function in the changes array. Never reference a function that isn't defined.\n"
@@ -567,20 +556,20 @@ _FIELD_LABELS: dict[str, str] = {
 def _cell_jsx(field: str) -> str:
     """JSX for a table cell — matches CellValue in TableView.tsx exactly."""
     if field == "urgency_score":
-        return '<span className={`px-1.5 py-0.5 rounded border text-xs ${urgencyColor(thread.urgency_score)}`}>{thread.urgency_score}</span>'
+        return '<span className={`px-1.5 py-0.5 rounded border text-xs bg-zinc-100 text-zinc-700`}>{item.urgency_score}</span>'
     if field == "date":
-        return '<span className="text-zinc-500">{formatDate(thread.date)}</span>'
+        return '<span className="text-zinc-500">{formatDate(item.date)}</span>'
     if field == "due_date":
-        return '<span className="text-zinc-500">{formatDate(thread.due_date)}</span>'
+        return '<span className="text-zinc-500">{formatDate(item.due_date)}</span>'
     if field == "is_read":
-        return '<span className={thread.is_read ? "text-zinc-400" : "text-blue-600 font-medium"}>{thread.is_read ? "Read" : "Unread"}</span>'
+        return '<span className={item.is_read ? "text-zinc-400" : "text-blue-600 font-medium"}>{item.is_read ? "Read" : "Unread"}</span>'
     if field == "project":
-        return '{thread.project ? <span className="bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded text-xs">{thread.project}</span> : <span className="text-zinc-400">—</span>}'
+        return '{item.project ? <span className="bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded text-xs">{item.project}</span> : <span className="text-zinc-400">—</span>}'
     if field == "tags":
-        return '<div className="flex gap-1 flex-wrap">{(thread.tags || []).map(tag => <span key={tag} className="bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded text-xs">{tag}</span>)}</div>'
+        return '<div className="flex gap-1 flex-wrap">{(item.tags || []).map(tag => <span key={tag} className="bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded text-xs">{tag}</span>)}</div>'
     if field == "subject":
-        return '<span className={`truncate block max-w-xs ${!thread.is_read ? "font-semibold text-zinc-900" : "text-zinc-600"}`}>{thread.subject || "—"}</span>'
-    return f'<span className="text-zinc-700 truncate block max-w-xs">{{String(thread.{field} ?? "—")}}</span>'
+        return '<span className={`truncate block max-w-xs ${!item.is_read ? "font-semibold text-zinc-900" : "text-zinc-600"}`}>{item.subject || "—"}</span>'
+    return f'<span className="text-zinc-700 truncate block max-w-xs">{{String(item.{field} ?? "—")}}</span>'
 
 
 def _table_base_component(fields: list[str]) -> str:
@@ -604,21 +593,21 @@ def _table_base_component(fields: list[str]) -> str:
         '  )\n'
         '}\n'
         '\n'
-        'function TableRow({ thread }) {\n'
+        'function TableRow({ item }) {\n'
         '  return (\n'
-        '    <tr data-sc="TableRow" className={`hover:bg-zinc-50 transition-colors ${!thread.is_read ? "bg-blue-50/30" : ""}`}>\n'
+        '    <tr data-sc="TableRow" className="hover:bg-zinc-50 transition-colors">\n'
         f'      {cell_tds}\n'
         '    </tr>\n'
         '  )\n'
         '}\n'
         '\n'
-        'function Layout({ threads }) {\n'
+        'function Layout({ items }) {\n'
         '  return (\n'
         '    <div data-sc="Layout" className="overflow-x-auto">\n'
         '      <table className="w-full text-sm">\n'
         '        <TableHeader />\n'
         '        <tbody className="divide-y divide-zinc-100">\n'
-        '          {threads.map(t => <TableRow key={t.id} thread={t} />)}\n'
+        '          {items.map(t => <TableRow key={t.id} item={t} />)}\n'
         '        </tbody>\n'
         '      </table>\n'
         '    </div>\n'
@@ -630,39 +619,36 @@ def _table_base_component(fields: list[str]) -> str:
 def _list_base_component(fields: list[str]) -> str:
     meta_parts: list[str] = []
     if "sender_name" in fields:
-        meta_parts.append('          <span className="text-xs text-zinc-500">{thread.sender_name}</span>')
+        meta_parts.append('          <span className="text-xs text-zinc-500">{item.sender_name}</span>')
     if "project" in fields:
-        meta_parts.append('          {thread.project && <span className="text-xs bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded">{thread.project}</span>}')
+        meta_parts.append('          {item.project && <span className="text-xs bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded">{item.project}</span>}')
     if "due_date" in fields:
-        meta_parts.append('          {thread.due_date && <span className="text-xs text-orange-600">Due {formatDate(thread.due_date)}</span>}')
+        meta_parts.append('          {item.due_date && <span className="text-xs text-orange-600">Due {formatDate(item.due_date)}</span>}')
     if "urgency_score" in fields:
-        meta_parts.append('          <span className={`text-xs px-1.5 py-0.5 rounded border ${urgencyColor(thread.urgency_score)}`}>{thread.urgency_score}</span>')
+        meta_parts.append('          <span className="text-xs px-1.5 py-0.5 rounded border bg-zinc-100 text-zinc-700">{item.urgency_score}</span>')
     if "tags" in fields:
         meta_parts.append(
-            '          {thread.tags && thread.tags.length > 0 && '
+            '          {item.tags && item.tags.length > 0 && '
             '<div className="flex gap-1">'
-            '{thread.tags.slice(0, 2).map(tag => '
+            '{item.tags.slice(0, 2).map(tag => '
             '<span key={tag} className="text-xs bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded">{tag}</span>'
             ')}</div>}'
         )
     meta_row = "\n".join(meta_parts)
     preview = (
-        '\n        <p className="text-xs text-zinc-400 truncate mt-0.5">{thread.preview}</p>'
+        '\n        <p className="text-xs text-zinc-400 truncate mt-0.5">{item.preview}</p>'
         if "preview" in fields else ""
     )
     return (
-        'function ThreadCard({ thread }) {\n'
+        'function ItemCard({ item }) {\n'
         '  return (\n'
-        '    <div data-sc="ThreadCard" className={`flex gap-4 px-4 py-3 hover:bg-zinc-50 transition-colors ${!thread.is_read ? "bg-blue-50/40" : ""}`}>\n'
-        '      <div className="mt-1 flex-shrink-0">\n'
-        '        <div className={`w-2 h-2 rounded-full mt-1.5 ${!thread.is_read ? "bg-blue-500" : "bg-transparent"}`} />\n'
-        '      </div>\n'
+        '    <div data-sc="ItemCard" className="flex gap-4 px-4 py-3 hover:bg-zinc-50 transition-colors">\n'
         '      <div className="flex-1 min-w-0">\n'
         '        <div className="flex items-baseline justify-between gap-2">\n'
-        '          <span className={`text-sm truncate ${!thread.is_read ? "font-semibold text-zinc-900" : "text-zinc-700"}`}>\n'
-        '            {thread.subject}\n'
+        '          <span className="text-sm truncate text-zinc-800 font-medium">\n'
+        '            {item.subject ?? item.title ?? item.name ?? "(no title)"}\n'
         '          </span>\n'
-        '          <span className="text-xs text-zinc-400 flex-shrink-0">{formatDate(thread.date)}</span>\n'
+        '          {item.date && <span className="text-xs text-zinc-400 flex-shrink-0">{formatDate(item.date)}</span>}\n'
         '        </div>\n'
         '        <div className="flex items-center gap-2 mt-0.5">\n'
         f'{meta_row}\n'
@@ -673,10 +659,10 @@ def _list_base_component(fields: list[str]) -> str:
         '  )\n'
         '}\n'
         '\n'
-        'function Layout({ threads }) {\n'
+        'function Layout({ items }) {\n'
         '  return (\n'
         '    <div data-sc="Layout" className="flex flex-col divide-y divide-zinc-100">\n'
-        '      {threads.map(t => <ThreadCard key={t.id} thread={t} />)}\n'
+        '      {items.map(t => <ItemCard key={t.id} item={t} />)}\n'
         '    </div>\n'
         '  )\n'
         '}'

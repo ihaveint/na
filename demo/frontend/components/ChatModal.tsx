@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import type { ChatMessage } from "./ChatPanel"
 
 const BUTTON_SIZE = 44
@@ -27,7 +28,8 @@ export default function ChatModal({
 }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [input, setInput] = useState("")
-  const [isMobile, setIsMobile] = useState(false)
+  // isMobile: null = not yet measured (renders nothing); true/false = measured
+  const [isMobile, setIsMobile] = useState<boolean | null>(null)
   // null = use CSS default (bottom-left corner via fixed + bottom/left)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -44,7 +46,8 @@ export default function ChatModal({
   const lastMessage = messages[messages.length - 1]
   const hasUnread = !isOpen && lastMessage?.role === "assistant" && !lastMessage.generatedComponent
 
-  // Track mobile breakpoint
+  // Single effect: measures mobile breakpoint and marks mounted in one batch.
+  // Keeping these together guarantees isMobile is known before anything renders.
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)")
     setIsMobile(mq.matches)
@@ -237,7 +240,11 @@ export default function ChatModal({
     </>
   )
 
-  return (
+  // Don't render until we know whether we're on mobile — avoids showing
+  // the wrong button (desktop FAB) for even one frame on a phone.
+  if (isMobile === null) return null
+
+  return createPortal(
     <>
       {/* ── Desktop: floating draggable modal ── */}
       {!isMobile && isOpen && (
@@ -309,6 +316,7 @@ export default function ChatModal({
           )}
         </>
       )}
-    </>
+    </>,
+    document.body
   )
 }

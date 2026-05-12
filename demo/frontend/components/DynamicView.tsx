@@ -1,15 +1,15 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
 import type { Thread } from "@/lib/types"
-import { formatDate, urgencyColor, groupThreads } from "@/lib/utils"
+import { formatDate, groupItems } from "@/lib/utils"
 
 interface Props {
   code: string
-  threads: Thread[]
-  onItemClick?: (thread: Thread) => void
+  items: Thread[]
+  onItemClick?: (item: Thread) => void
 }
 
-export default function DynamicView({ code, threads, onItemClick }: Props) {
+export default function DynamicView({ code, items, onItemClick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<ReturnType<typeof import("react-dom/client")["createRoot"]> | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -40,8 +40,7 @@ export default function DynamicView({ code, threads, onItemClick }: Props) {
           useEffect: React.useEffect,
           useMemo: React.useMemo,
           formatDate,
-          urgencyColor,
-          groupThreads,
+          groupItems,
           onItemClick,
         }
 
@@ -55,7 +54,7 @@ export default function DynamicView({ code, threads, onItemClick }: Props) {
           rootRef.current = ReactDOM.createRoot(containerRef.current)
         }
 
-        rootRef.current.render(React.default.createElement(Layout, { threads, onItemClick }))
+        rootRef.current.render(React.default.createElement(Layout, { items, onItemClick }))
         setError(null)
       } catch (e: unknown) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
@@ -64,7 +63,7 @@ export default function DynamicView({ code, threads, onItemClick }: Props) {
 
     render()
     return () => { cancelled = true }
-  }, [code, threads])
+  }, [code, items])
 
   if (error) {
     return (

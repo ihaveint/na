@@ -101,6 +101,20 @@ export function groupThreads(
   return groups
 }
 
+export function groupItems(
+  items: Record<string, unknown>[],
+  groupBy: string | null
+): Record<string, Record<string, unknown>[]> {
+  if (!groupBy) return { "": items }
+  const groups: Record<string, Record<string, unknown>[]> = {}
+  for (const item of items) {
+    const key = String(item[groupBy] ?? "Other")
+    if (!groups[key]) groups[key] = []
+    groups[key].push(item)
+  }
+  return groups
+}
+
 const URGENCY_COLORS: Record<string, string> = {}
 export function urgencyColor(score: number): string {
   if (score >= 85) return "bg-red-100 text-red-700 border-red-200"
