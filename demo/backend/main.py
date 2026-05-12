@@ -18,9 +18,10 @@ from data import THREADS, THREADS_BY_ID
 load_dotenv()
 
 app = FastAPI(title="N/A Email Demo")
+origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
