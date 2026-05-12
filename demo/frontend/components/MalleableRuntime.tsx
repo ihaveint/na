@@ -37,7 +37,7 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
   const isRestoringRef = useRef(false)
   const isFirstSchemaRender = useRef(true)
 
-  const { versions, push: pushVersion, clear: clearVersions } = useVersionHistory(`na:history:${personaId}`)
+  const { versions, currentIndex, push: pushVersion, restore: restoreVersion, clear: clearVersions } = useVersionHistory(`na:history:${personaId}`)
 
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return }
@@ -133,13 +133,15 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
     }
   }
 
-  function handleRestore(v: Version) {
+  function handleRestore(index: number) {
+    const v = versions[index]
+    if (!v) return
     isRestoringRef.current = true
     setRenderMode(v.renderMode)
     setComponentCode(v.componentCode)
     setShowHistory(false)
     if (v.schema !== schema) onSchemaChange(v.schema)
-    pushVersion({ label: `Restored to: ${v.label}`, schema: v.schema, componentCode: v.componentCode, renderMode: v.renderMode })
+    restoreVersion(index)
   }
 
   function handleElementClick(context: string) {
@@ -253,6 +255,7 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
 
       <HistoryDrawer
         versions={versions}
+        currentIndex={currentIndex}
         open={showHistory}
         onClose={() => setShowHistory(false)}
         onRestore={handleRestore}

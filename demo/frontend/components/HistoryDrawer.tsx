@@ -3,9 +3,10 @@ import type { Version } from "@/lib/types"
 
 interface Props {
   versions: Version[]
+  currentIndex: number
   open: boolean
   onClose: () => void
-  onRestore: (v: Version) => void
+  onRestore: (index: number) => void
 }
 
 function relativeTime(ts: number): string {
@@ -16,21 +17,16 @@ function relativeTime(ts: number): string {
   return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
 }
 
-export default function HistoryDrawer({ versions, open, onClose, onRestore }: Props) {
+export default function HistoryDrawer({ versions, currentIndex, open, onClose, onRestore }: Props) {
   if (!open) return null
 
-  const displayed = [...versions].reverse()
-  const currentId = displayed[0]?.id
+  // Display newest first; track original index for restore
+  const displayed = versions.map((v, i) => ({ ...v, originalIndex: i })).reverse()
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-[9998] bg-black/20"
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 z-[9998] bg-black/20" onClick={onClose} />
 
-      {/* Drawer */}
       <div
         className="fixed right-0 top-0 h-full bg-white border-l border-zinc-200 shadow-2xl flex flex-col z-[9999]"
         style={{ width: 300 }}
@@ -57,26 +53,23 @@ export default function HistoryDrawer({ versions, open, onClose, onRestore }: Pr
             </p>
           ) : (
             <div className="relative">
-              {/* Timeline line */}
               <div className="absolute left-[27px] top-0 bottom-0 w-px bg-zinc-100" />
 
-              {displayed.map((v, i) => {
-                const isCurrent = v.id === currentId
+              {displayed.map((v) => {
+                const isCurrent = v.originalIndex === currentIndex
                 return (
                   <div key={v.id} className="flex gap-3 px-4 py-3 group">
-                    {/* Dot */}
                     <div className="flex-shrink-0 mt-1 relative z-10">
-                      <div className={`w-3 h-3 rounded-full border-2 ${
+                      <div className={`w-3 h-3 rounded-full border-2 transition-colors ${
                         isCurrent
                           ? "bg-violet-500 border-violet-500"
                           : "bg-white border-zinc-300 group-hover:border-violet-300"
                       }`} />
                     </div>
 
-                    {/* Content */}
                     <div className="flex-1 min-w-0 pb-1">
                       <div className="flex items-start justify-between gap-2">
-                        <p className={`text-xs leading-snug ${isCurrent ? "text-zinc-800 font-medium" : "text-zinc-600"}`}>
+                        <p className={`text-xs leading-snug ${isCurrent ? "text-zinc-800 font-medium" : "text-zinc-500"}`}>
                           {v.label}
                         </p>
                         {isCurrent && (
@@ -100,7 +93,7 @@ export default function HistoryDrawer({ versions, open, onClose, onRestore }: Pr
 
                         {!isCurrent && (
                           <button
-                            onClick={() => onRestore(v)}
+                            onClick={() => onRestore(v.originalIndex)}
                             className="text-[10px] text-violet-600 hover:text-violet-800 font-medium opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             Restore
