@@ -666,6 +666,15 @@ def _is_bug_report(message: str) -> bool:
     return resp.content[0].text.strip().lower().startswith("y")
 
 
+def _find_undefined_components(code: str) -> list[str]:
+    """Return any JSX component names that are used but not defined in the code."""
+    defined = set(re.findall(r'function\s+([A-Z]\w*)\s*\(', code))
+    used = set(re.findall(r'<([A-Z]\w*)[\s/>]', code))
+    # These are always available in scope
+    builtin = {"React"}
+    return sorted(used - defined - builtin)
+
+
 def _parse_response(raw: str) -> dict:
     if raw.startswith("```"):
         raw = "\n".join(raw.split("\n")[1:])
@@ -741,6 +750,14 @@ async def chat(body: ChatRequest):
                 result_code = body.current_code
                 for func_name, new_func in valid:
                     result_code = _replace_subcomponent(result_code, func_name, new_func)
+                undefined = _find_undefined_components(result_code)
+                if undefined:
+                    return {
+                        "action": "question",
+                        "message": f"The generated code references {', '.join(undefined)} but never defines {'it' if len(undefined) == 1 else 'them'}. Please try again — the AI needs to include every component it references.",
+                        "schema": None,
+                        "code": None,
+                    }
                 return {"action": "component", "message": parsed["message"], "schema": None, "code": _ensure_data_sc(result_code)}
             return {
                 "action": "question",
@@ -790,6 +807,15 @@ async def chat(body: ChatRequest):
         raise HTTPException(status_code=500, detail=f"JSON parse error: {e}\nRaw: {raw}")
 
     raw_code = parsed.get("code")
+    if raw_code:
+        undefined = _find_undefined_components(raw_code)
+        if undefined:
+            return {
+                "action": "question",
+                "message": f"The generated code references {', '.join(undefined)} but never defines {'it' if len(undefined) == 1 else 'them'}. Please try again.",
+                "schema": None,
+                "code": None,
+            }
     result: dict = {
         "action": parsed.get("action", "question"),
         "message": parsed.get("message", ""),
