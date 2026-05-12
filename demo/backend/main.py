@@ -619,6 +619,21 @@ def _schema_to_base_component(schema) -> str | None:
     return None
 
 
+def _is_bug_report(message: str) -> bool:
+    """Use a fast LLM call to decide if the message is reporting broken behavior vs. requesting a new feature."""
+    resp = get_anthropic().messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=8,
+        system=(
+            "Reply with only 'yes' or 'no'. "
+            "Is the following message reporting that something is broken, not working, or producing wrong output? "
+            "(yes = bug report / debugging; no = new feature request or styling change)"
+        ),
+        messages=[{"role": "user", "content": message}],
+    )
+    return resp.content[0].text.strip().lower().startswith("y")
+
+
 def _parse_response(raw: str) -> dict:
     if raw.startswith("```"):
         raw = "\n".join(raw.split("\n")[1:])
@@ -653,19 +668,24 @@ async def chat(body: ChatRequest):
 
         # Extract [SubcomponentName] from the last user message if present (from inspect context)
         last_message = messages[-1]["content"] if messages else ""
-        target_match = re.search(r'\[(\w+)\]', last_message)
-        target = target_match.group(1) if target_match else None
-        if target and (target not in components or target in _STRUCTURAL):
-            target = None
 
-        # No inspect context on this message — check recent history for the last useful target
-        # (handles follow-up messages where the user is clearly continuing the previous edit)
-        if not target:
-            for msg in reversed(messages[:-1]):
-                m = re.search(r'\[(\w+)\]', msg.get("content", ""))
-                if m and m.group(1) in components and m.group(1) not in _STRUCTURAL:
-                    target = m.group(1)
-                    break
+        # Bug reports need full component visibility — the cause may be in any sub-component
+        # or in the data flow between them, so skip surgical targeting entirely.
+        if _is_bug_report(last_message):
+            target = None
+        else:
+            target_match = re.search(r'\[(\w+)\]', last_message)
+            target = target_match.group(1) if target_match else None
+            if target and (target not in components or target in _STRUCTURAL):
+                target = None
+
+            # No inspect context — check recent history for the last useful target
+            if not target:
+                for msg in reversed(messages[:-1]):
+                    m = re.search(r'\[(\w+)\]', msg.get("content", ""))
+                    if m and m.group(1) in components and m.group(1) not in _STRUCTURAL:
+                        target = m.group(1)
+                        break
 
         raw = get_anthropic().messages.create(
             model="claude-sonnet-4-6",
