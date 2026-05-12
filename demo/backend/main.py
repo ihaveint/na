@@ -752,9 +752,33 @@ async def chat(body: ChatRequest):
                     result_code = _replace_subcomponent(result_code, func_name, new_func)
                 undefined = _find_undefined_components(result_code)
                 if undefined:
+                    fix_msg = (
+                        f"Your previous response referenced {', '.join(undefined)} but never defined {'it' if len(undefined) == 1 else 'them'}. "
+                        f"Return the same changes but include the complete function definition for every component you reference. "
+                        f"Do not omit any component."
+                    )
+                    raw2 = get_anthropic().messages.create(
+                        model="claude-sonnet-4-6",
+                        max_tokens=8096,
+                        system=_make_subcomponent_modify_prompt(components, target),
+                        messages=messages + [{"role": "assistant", "content": raw}, {"role": "user", "content": fix_msg}],
+                    ).content[0].text.strip()
+                    try:
+                        parsed2 = _parse_response(raw2)
+                    except Exception:
+                        parsed2 = {}
+                    if parsed2.get("action") == "component":
+                        changes2 = parsed2.get("changes", [])
+                        valid2 = [(c["name"], c["code"]) for c in changes2 if c.get("name") in components and c.get("code")]
+                        if valid2:
+                            result_code = body.current_code
+                            for func_name, new_func in valid2:
+                                result_code = _replace_subcomponent(result_code, func_name, new_func)
+                            if not _find_undefined_components(result_code):
+                                return {"action": "component", "message": parsed2.get("message", parsed["message"]), "schema": None, "code": _ensure_data_sc(result_code)}
                     return {
                         "action": "question",
-                        "message": f"The generated code references {', '.join(undefined)} but never defines {'it' if len(undefined) == 1 else 'them'}. Please try again — the AI needs to include every component it references.",
+                        "message": f"The generated code references {', '.join(undefined)} but never defines {'it' if len(undefined) == 1 else 'them'}. Please try again.",
                         "schema": None,
                         "code": None,
                     }
@@ -810,12 +834,21 @@ async def chat(body: ChatRequest):
     if raw_code:
         undefined = _find_undefined_components(raw_code)
         if undefined:
-            return {
-                "action": "question",
-                "message": f"The generated code references {', '.join(undefined)} but never defines {'it' if len(undefined) == 1 else 'them'}. Please try again.",
-                "schema": None,
-                "code": None,
-            }
+            fix_msg = (
+                f"Your previous response referenced {', '.join(undefined)} but never defined {'it' if len(undefined) == 1 else 'them'}. "
+                f"Regenerate the full component and include the complete function definition for every component you reference."
+            )
+            raw2 = get_anthropic().messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=8096,
+                system=_CHAT_SYSTEM_PROMPT,
+                messages=messages + [{"role": "assistant", "content": raw}, {"role": "user", "content": fix_msg}],
+            ).content[0].text.strip()
+            try:
+                parsed = _parse_response(raw2)
+                raw_code = parsed.get("code")
+            except Exception:
+                pass
     result: dict = {
         "action": parsed.get("action", "question"),
         "message": parsed.get("message", ""),
