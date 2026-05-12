@@ -1,13 +1,15 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
-import type { Thread, UISchema } from "@/lib/types"
+import type { Thread, UISchema, Version } from "@/lib/types"
 import { applySchema } from "@/lib/utils"
+import { useVersionHistory } from "@/lib/useVersionHistory"
 import ListView from "./layouts/ListView"
 import KanbanView from "./layouts/KanbanView"
 import TableView from "./layouts/TableView"
 import DynamicView from "./DynamicView"
 import ChatModal from "./ChatModal"
 import InspectOverlay from "./InspectOverlay"
+import HistoryDrawer from "./HistoryDrawer"
 import type { ChatMessage } from "./ChatPanel"
 
 const API = "http://localhost:8000"
@@ -15,9 +17,10 @@ const API = "http://localhost:8000"
 interface Props {
   schema: UISchema
   onSchemaChange: (s: UISchema) => void
+  personaId: string
 }
 
-export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
+export default function MalleableRuntime({ schema, onSchemaChange, personaId }: Props) {
   const [threads, setThreads] = useState<Thread[]>([])
   const [loading, setLoading] = useState(true)
   const [applying, setApplying] = useState(false)
@@ -28,8 +31,13 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
   const [inspectMode, setInspectMode] = useState(false)
   const [inspectContext, setInspectContext] = useState<string | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const isFirstRender = useRef(true)
+  const isRestoringRef = useRef(false)
+  const isFirstSchemaRender = useRef(true)
+
+  const { versions, push: pushVersion, clear: clearVersions } = useVersionHistory(`na:history:${personaId}`)
 
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return }
@@ -47,12 +55,15 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
 
   // Reset conversation when persona switches (schema changes from parent)
   useEffect(() => {
+    if (isRestoringRef.current) { isRestoringRef.current = false; return }
+    if (isFirstSchemaRender.current) { isFirstSchemaRender.current = false; return }
     setChatHistory([])
     setComponentCode(null)
     setRenderMode("schema")
     setInspectContext(null)
     setInspectMode(false)
-  }, [schema])
+    clearVersions()
+  }, [schema, clearVersions])
 
   const displayed = applySchema(threads, schema)
 
@@ -108,16 +119,27 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
         setRenderMode("schema")
         setComponentCode(null)
         flash()
+        pushVersion({ label: data.message, schema: data.schema, componentCode: null, renderMode: "schema" })
       } else if (data.action === "component" && data.code) {
         setComponentCode(data.code)
         setRenderMode("component")
         flash()
+        pushVersion({ label: data.message, schema, componentCode: data.code, renderMode: "component" })
       }
     } catch (e) {
       alert(`Error: ${e}`)
     } finally {
       setApplying(false)
     }
+  }
+
+  function handleRestore(v: Version) {
+    isRestoringRef.current = true
+    setRenderMode(v.renderMode)
+    setComponentCode(v.componentCode)
+    setShowHistory(false)
+    if (v.schema !== schema) onSchemaChange(v.schema)
+    pushVersion({ label: `Restored to: ${v.label}`, schema: v.schema, componentCode: v.componentCode, renderMode: v.renderMode })
   }
 
   function handleElementClick(context: string) {
@@ -187,6 +209,22 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
         <span className={`text-xs font-medium text-violet-600 transition-opacity duration-300 ${justApplied ? "opacity-100" : "opacity-0"}`}>
           Applied
         </span>
+
+        {/* History button */}
+        <button
+          onClick={() => setShowHistory((v) => !v)}
+          title="View history"
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+            showHistory
+              ? "bg-zinc-800 text-white border-zinc-800"
+              : "text-zinc-500 border-zinc-200 hover:bg-zinc-100"
+          }`}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          {versions.length > 0 && <span>{versions.length}</span>}
+        </button>
       </div>
 
       {/* Generated code panel */}
@@ -212,6 +250,13 @@ export default function MalleableRuntime({ schema, onSchemaChange }: Props) {
 
         <InspectOverlay active={inspectMode} onElementClick={handleElementClick} />
       </div>
+
+      <HistoryDrawer
+        versions={versions}
+        open={showHistory}
+        onClose={() => setShowHistory(false)}
+        onRestore={handleRestore}
+      />
 
       {/* Floating chat */}
       <ChatModal

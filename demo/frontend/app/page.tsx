@@ -117,6 +117,7 @@ export default function Home() {
           <MalleableRuntime
             schema={schema}
             onSchemaChange={(s) => { setSchema(s); updateSchema(activePersona, s) }}
+            personaId={activePersona}
           />
         </div>
       </main>

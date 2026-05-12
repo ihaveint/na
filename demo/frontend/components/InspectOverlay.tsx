@@ -98,8 +98,8 @@ export default function InspectOverlay({ active, onElementClick }: Props) {
       {highlight && (
         <div
           className="pointer-events-none fixed rounded-sm"
-          style={{ zIndex: 99999 }}
           style={{
+            zIndex: 99999,
             top: highlight.top - 2,
             left: highlight.left - 2,
             width: highlight.width + 4,
@@ -114,8 +114,7 @@ export default function InspectOverlay({ active, onElementClick }: Props) {
       {tooltip && (
         <div
           className="pointer-events-none fixed px-2 py-1 bg-zinc-900 text-white text-xs rounded-md shadow-lg max-w-xs truncate"
-          style={{ zIndex: 99999 }}
-          style={{ top: tooltip.y, left: tooltip.x, transform: "translateX(-50%)" }}
+          style={{ zIndex: 99999, top: tooltip.y, left: tooltip.x, transform: "translateX(-50%)" }}
         >
           {tooltip.text}
         </div>

@@ -24,6 +24,15 @@ export interface UISchema {
   actions: string[]
 }
 
+export interface Version {
+  id: string
+  timestamp: number
+  label: string
+  schema: UISchema
+  componentCode: string | null
+  renderMode: "schema" | "component"
+}
+
 export interface Persona {
   id: string
   label: string
