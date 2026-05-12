@@ -6,10 +6,10 @@ import { formatDate, urgencyColor, groupThreads } from "@/lib/utils"
 interface Props {
   code: string
   threads: Thread[]
-  onThreadClick?: (thread: Thread) => void
+  onItemClick?: (thread: Thread) => void
 }
 
-export default function DynamicView({ code, threads, onThreadClick }: Props) {
+export default function DynamicView({ code, threads, onItemClick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<ReturnType<typeof import("react-dom/client")["createRoot"]> | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -42,6 +42,7 @@ export default function DynamicView({ code, threads, onThreadClick }: Props) {
           formatDate,
           urgencyColor,
           groupThreads,
+          onItemClick,
         }
 
         // eslint-disable-next-line no-new-func
@@ -54,7 +55,7 @@ export default function DynamicView({ code, threads, onThreadClick }: Props) {
           rootRef.current = ReactDOM.createRoot(containerRef.current)
         }
 
-        rootRef.current.render(React.default.createElement(Layout, { threads, onThreadClick }))
+        rootRef.current.render(React.default.createElement(Layout, { threads, onItemClick }))
         setError(null)
       } catch (e: unknown) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))

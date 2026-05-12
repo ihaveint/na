@@ -55,7 +55,10 @@ def _hint_to_str(hint) -> str:
     origin = typing.get_origin(hint)
     if origin is list:
         args = typing.get_args(hint)
-        inner = args[0].__name__ if args else "Any"
+        if args:
+            inner = args[0].__name__ if hasattr(args[0], "__name__") else str(args[0])
+        else:
+            inner = "Any"
         return f"{inner}[]"
     if origin is typing.Union:
         args = [a for a in typing.get_args(hint) if a is not type(None)]

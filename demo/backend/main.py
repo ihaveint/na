@@ -275,12 +275,11 @@ async def generate_component(body: GenerateComponentRequest):
 # Unified chat — single endpoint that decides schema vs component vs question
 # ---------------------------------------------------------------------------
 
-_CHAT_SYSTEM_PROMPT = """You are a conversational UI agent for a N/A email client. You help users customize how their email data is displayed by either updating a config schema or generating a custom React component.
-
+_CHAT_SYSTEM_PROMPT_STATIC = """\
 ALWAYS respond with valid JSON only — no markdown fences, no explanation outside the JSON:
 
 Schema update:    {"action":"schema",    "message":"...", "schema":{...}, "code":null}
-Component:        {"action":"component", "message":"...", "schema":null,  "code":"function Layout({ threads }) { ... }"}
+Component:        {"action":"component", "message":"...", "schema":null,  "code":"function Layout({ threads, onItemClick }) { ... }"}
 Clarifying question: {"action":"question",  "message":"...", "schema":null,  "code":null}
 
 --- WHEN TO USE EACH ---
@@ -315,24 +314,22 @@ Use "question" when:
 UISchema:
 {
   "layout": "list" | "kanban" | "table" | "calendar",
-  "data_source": "list_all" | "list_actionable",
+  "data_source": "<intent from manifest>",
   "group_by": "<field>" | null,
   "sort_by": "<field>" | null,
   "sort_direction": "asc" | "desc",
-  "card_fields": ["subject", "sender_name", ...],
+  "card_fields": ["<field_names>"],
   "filters": [{"field":"...","op":"eq|neq|gt|lt","value":"..."}],
-  "actions": ["MarkDone","SnoozeThread","TagProject"]
+  "actions": []
 }
 
-Thread fields: id, subject, sender, sender_name, preview, project, urgency_score (0-100), date (ISO), is_read, is_snoozed, due_date (ISO|null), tags (string[])
-Virtual group_by: urgency_bucket (Critical/Normal/Low), has_deadline (Has deadline/No deadline)
-Calendar requires sort_by="date" or "due_date". Kanban works best with group_by set.
-Always include at least ["subject","sender_name"] in card_fields.
+Calendar requires sort_by to be a date field. Kanban works best with group_by set.
+Always include the primary display field in card_fields.
 
 --- COMPONENT FORMAT ---
 
-Props: { threads: Thread[], onThreadClick: (thread: Thread) => void }
-Call onThreadClick(thread) when the user clicks a card/row/item to open its email detail view. Always wire this up on clickable items.
+Props: { threads: Thread[], onItemClick: (item: Thread) => void }
+Call onItemClick(item) when the user clicks a card/row/item to open its detail view. Always wire this up on clickable items.
 Already in scope — do NOT import: React, useState, useEffect, useMemo, formatDate(iso), urgencyColor(score), groupThreads(threads, field)
 
 urgencyColor(score) returns a STRING of Tailwind classes like "bg-red-100 text-red-700 border-red-200".
@@ -353,29 +350,93 @@ UNDEFINED REFERENCES — every function/component you call or render MUST be def
 If you write <HeatmapModal />, a function HeatmapModal must exist in your code. No exceptions.
 
 MANDATORY structure — you MUST decompose into at least 2 named functions:
-- Extract every repeating or distinct UI element into its own function (e.g. ThreadCard, TableRow, GroupHeader, SidePanel)
+- Extract every repeating or distinct UI element into its own function (e.g. ItemCard, TableRow, GroupHeader, SidePanel)
 - The main entry point MUST be named exactly `Layout`
 - Add `data-sc="FunctionName"` on the ROOT element of EVERY function (including Layout) — this is required for surgical editing
 - A single monolithic `function Layout` is NEVER acceptable
 - No imports, no exports
 
 Examples:
-  List/table layouts → ThreadCard or TableRow + Layout (and TableHeader if there's a header row)
-  Split-pane → ThreadListItem + DetailPanel + Layout
+  List/table layouts → ItemCard or TableRow + Layout (and TableHeader if there's a header row)
+  Split-pane → ListItem + DetailPanel + Layout
   Heatmap/grid → GridCell + GridRow + Layout
 
   function TableHeader() {
     return <thead data-sc="TableHeader"><tr>...</tr></thead>
   }
-  function TableRow({ thread }) {
-    return <tr data-sc="TableRow">...</tr>
+  function TableRow({ thread, onItemClick }) {
+    return <tr data-sc="TableRow" onClick={() => onItemClick(thread)}>...</tr>
   }
-  function Layout({ threads }) {
+  function Layout({ threads, onItemClick }) {
     return <div data-sc="Layout" className="p-4">
-      <table><TableHeader /><tbody>{threads.map(t => <TableRow key={t.id} thread={t} />)}</tbody></table>
+      <table><TableHeader /><tbody>{threads.map(t => <TableRow key={t.id} thread={t} onItemClick={onItemClick} />)}</tbody></table>
     </div>
   }
 """
+
+
+def _build_chat_system_prompt(manifest: dict) -> str:
+    """Build the /chat system prompt dynamically from the manifest.
+
+    Entity fields, field types, and valid data_source values are derived at
+    runtime so the same /chat endpoint works across any domain without edits.
+    The component boilerplate (styling rules, tooltip pattern, etc.) is truly
+    generic and stays as a static string.
+    """
+    entities = manifest.get("entities", {})
+    endpoints = manifest.get("endpoints", [])
+
+    # --- Entity + field section ---
+    entity_blocks: list[str] = []
+    for entity_name, fields in entities.items():
+        field_lines: list[str] = []
+        for fname, meta in fields.items():
+            if fname.startswith("_"):
+                continue
+            ftype = meta.get("type", "any")
+            desc = meta.get("description", "")
+            entry = f"  {fname} ({ftype})"
+            if desc:
+                entry += f" — {desc}"
+            field_lines.append(entry)
+        entity_blocks.append(f"{entity_name} fields:\n" + "\n".join(field_lines))
+    entity_section = "\n\n".join(entity_blocks) if entity_blocks else "  (no entities in manifest)"
+
+    # --- Valid data_source values ---
+    # By convention, list intents start with "list_"; single-item lookups use "get".
+    # Operations (write endpoints) have no intent, so they're excluded automatically.
+    list_endpoints = [
+        e for e in endpoints
+        if e.get("intent") and str(e["intent"]).startswith("list")
+    ]
+    if list_endpoints:
+        ds_lines = "\n".join(
+            f'  "{e["intent"]}" — {e.get("description", "")}'
+            for e in list_endpoints
+        )
+    else:
+        ds_lines = "  (no list endpoints found)"
+
+    # --- Virtual group_by fields (domain-agnostic examples from manifest) ---
+    # These are computed fields the schema can reference even though they're not stored.
+    # For now we list them statically; a future pass can derive them from annotations.
+    virtual_section = (
+        "Virtual group_by fields (computed, not stored — include when relevant):\n"
+        "  urgency_bucket — Critical / Normal / Low  (derived from urgency_score if present)\n"
+        "  has_deadline   — Has deadline / No deadline  (derived from due_date if present)"
+    )
+
+    intro = (
+        f"You are a conversational UI agent. "
+        f"You help users customize how their data is displayed by updating a config schema "
+        f"or generating a custom React component.\n\n"
+        f"--- DATA MODEL ---\n\n"
+        f"{entity_section}\n\n"
+        f"{virtual_section}\n\n"
+        f"Valid data_source values (use the exact intent string):\n{ds_lines}"
+    )
+
+    return intro + "\n\n" + _CHAT_SYSTEM_PROMPT_STATIC
 
 
 def _ensure_data_sc(code: str) -> str:
@@ -478,7 +539,7 @@ def _make_subcomponent_modify_prompt(components: dict[str, str], target: str | N
         "- Do NOT redesign, reformat, or restyle anything not explicitly requested.\n"
         "- PROP DRILLING: If adding a new prop to a child component, you MUST also update every parent that renders it to pass that prop through. Include all affected components in your changes array.\n"
         "- Available in scope (do NOT import): React, useState, useEffect, useMemo, formatDate(iso), urgencyColor(score), groupThreads(threads, field)\n"
-        "- Layout receives two props: `threads` (array) and `onThreadClick(thread)` (function). Call `onThreadClick(thread)` when the user clicks a thread/card/row to open its detail view. Always wire this up on clickable items.\n"
+        "- Layout receives two props: `threads` (array) and `onItemClick(item)` (function). Call `onItemClick(item)` when the user clicks a card/row/item to open its detail view. Always wire this up on clickable items.\n"
         + tooltip_rule + "\n"
         "- BORDER RADIUS: always use inline style={{borderRadius:'1rem'}} NOT Tailwind rounded-* classes. Tailwind rounded-* is unreliable in generated components.\n"
         "- UNDEFINED REFERENCES: every function/component you call or render MUST be defined in your output. If you reference <Foo />, Foo must appear as a function in the changes array. Never reference a function that isn't defined.\n"
@@ -696,6 +757,9 @@ def _parse_response(raw: str) -> dict:
 
 @app.post("/chat")
 async def chat(body: ChatRequest):
+    from models import Thread as ThreadModel
+    manifest = generate_manifest([ThreadModel])
+    chat_system_prompt = _build_chat_system_prompt(manifest)
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
 
     if body.current_code:
@@ -839,7 +903,7 @@ async def chat(body: ChatRequest):
     raw = get_anthropic().messages.create(
         model="claude-sonnet-4-6",
         max_tokens=4096,
-        system=_CHAT_SYSTEM_PROMPT,
+        system=chat_system_prompt,
         messages=messages,
     ).content[0].text.strip()
 
@@ -859,7 +923,7 @@ async def chat(body: ChatRequest):
             raw2 = get_anthropic().messages.create(
                 model="claude-sonnet-4-6",
                 max_tokens=8096,
-                system=_CHAT_SYSTEM_PROMPT,
+                system=chat_system_prompt,
                 messages=messages + [{"role": "assistant", "content": raw}, {"role": "user", "content": fix_msg}],
             ).content[0].text.strip()
             try:

@@ -364,7 +364,7 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
         {loading ? (
           <div className="flex items-center justify-center h-full text-zinc-400 text-sm">Loading…</div>
         ) : renderMode === "component" && componentCode ? (
-          <DynamicView code={componentCode} threads={displayed} onThreadClick={setSelectedThread} />
+          <DynamicView code={componentCode} threads={displayed} onItemClick={setSelectedThread} />
         ) : schema.layout === "kanban" ? (
           <KanbanView threads={displayed} schema={schema} onThreadClick={setSelectedThread} />
         ) : schema.layout === "table" ? (
