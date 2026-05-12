@@ -59,13 +59,13 @@ export default function HistoryDrawer({ versions, currentIndex, open, onClose, o
                 const isCurrent = v.originalIndex === currentIndex
                 const isFuture = v.originalIndex > currentIndex
                 return (
-                  <div key={v.id} className={`flex gap-3 px-4 py-3 group ${isFuture ? "opacity-40" : ""}`}>
+                  <div key={v.id} className="flex gap-3 px-4 py-3 group">
                     <div className="flex-shrink-0 mt-1 relative z-10">
                       <div className={`w-3 h-3 rounded-full border-2 transition-colors ${
                         isCurrent
                           ? "bg-violet-500 border-violet-500"
                           : isFuture
-                          ? "bg-white border-zinc-200"
+                          ? "bg-white border-zinc-300 border-dashed group-hover:border-violet-300"
                           : "bg-white border-zinc-300 group-hover:border-violet-300"
                       }`} />
                     </div>
@@ -74,7 +74,7 @@ export default function HistoryDrawer({ versions, currentIndex, open, onClose, o
                       <div className="flex items-start justify-between gap-2">
                         <p className={`text-xs leading-snug ${
                           isCurrent ? "text-zinc-800 font-medium"
-                          : isFuture ? "text-zinc-400 line-through"
+                          : isFuture ? "text-zinc-400 italic"
                           : "text-zinc-500"
                         }`}>
                           {v.label}
@@ -84,12 +84,22 @@ export default function HistoryDrawer({ versions, currentIndex, open, onClose, o
                             current
                           </span>
                         )}
+                        {isFuture && (
+                          <button
+                            onClick={() => onRestore(v.originalIndex)}
+                            className="text-[10px] font-medium text-zinc-400 hover:text-violet-600 flex-shrink-0 transition-colors"
+                          >
+                            Jump to ↑
+                          </button>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-between mt-1">
                         <div className="flex items-center gap-1.5">
                           <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                            v.renderMode === "component"
+                            isFuture
+                              ? "bg-zinc-50 text-zinc-400"
+                              : v.renderMode === "component"
                               ? "bg-violet-100 text-violet-600"
                               : "bg-zinc-100 text-zinc-500"
                           }`}>
@@ -98,12 +108,12 @@ export default function HistoryDrawer({ versions, currentIndex, open, onClose, o
                           <span className="text-[10px] text-zinc-400">{relativeTime(v.timestamp)}</span>
                         </div>
 
-                        {!isCurrent && (
+                        {!isCurrent && !isFuture && (
                           <button
                             onClick={() => onRestore(v.originalIndex)}
                             className="text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity text-violet-600 hover:text-violet-800"
                           >
-                            {isFuture ? "Jump to" : "Restore"}
+                            Restore
                           </button>
                         )}
                       </div>
