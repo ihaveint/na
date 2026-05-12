@@ -331,7 +331,8 @@ Always include at least ["subject","sender_name"] in card_fields.
 
 --- COMPONENT FORMAT ---
 
-Props: { threads: Thread[] }  (same fields as above)
+Props: { threads: Thread[], onThreadClick: (thread: Thread) => void }
+Call onThreadClick(thread) when the user clicks a card/row/item to open its email detail view. Always wire this up on clickable items.
 Already in scope — do NOT import: React, useState, useEffect, useMemo, formatDate(iso), urgencyColor(score), groupThreads(threads, field)
 
 urgencyColor(score) returns a STRING of Tailwind classes like "bg-red-100 text-red-700 border-red-200".
@@ -476,7 +477,8 @@ def _make_subcomponent_modify_prompt(components: dict[str, str], target: str | N
         "- Keep the `data-sc=\"ComponentName\"` attribute on the root element of every function you return.\n"
         "- Do NOT redesign, reformat, or restyle anything not explicitly requested.\n"
         "- PROP DRILLING: If adding a new prop to a child component, you MUST also update every parent that renders it to pass that prop through. Include all affected components in your changes array.\n"
-        "- Available in scope (do NOT import): React, useState, useEffect, useMemo, formatDate(iso), urgencyColor(score), groupThreads(threads, field)\n"
+        "- Available in scope (do NOT import): React, useState, useEffect, useMemo, formatDate(iso), urgencyColor(score), groupThreads(threads, field)
+- Layout receives two props: `threads` (array) and `onThreadClick(thread)` (function). Call `onThreadClick(thread)` when the user clicks a thread/card/row to open its detail view. Always wire this up on clickable items.\n"
         + tooltip_rule + "\n"
         "- BORDER RADIUS: always use inline style={{borderRadius:'1rem'}} NOT Tailwind rounded-* classes. Tailwind rounded-* is unreliable in generated components.\n"
         "- UNDEFINED REFERENCES: every function/component you call or render MUST be defined in your output. If you reference <Foo />, Foo must appear as a function in the changes array. Never reference a function that isn't defined.\n"
