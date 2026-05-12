@@ -24,19 +24,35 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
   const [loading, setLoading] = useState(true)
   const [applying, setApplying] = useState(false)
   const [justApplied, setJustApplied] = useState(false)
-  const [renderMode, setRenderMode] = useState<"schema" | "component">("schema")
-  const [componentCode, setComponentCode] = useState<string | null>(null)
+
+  const { versions, currentIndex, push: pushVersion, restore: restoreVersion, clear: clearVersions } = useVersionHistory(`na:history:${personaId}`)
+  const savedVersion = versions[currentIndex] ?? null
+
+  const [renderMode, setRenderMode] = useState<"schema" | "component">(
+    () => savedVersion?.renderMode ?? "schema"
+  )
+  const [componentCode, setComponentCode] = useState<string | null>(
+    () => savedVersion?.componentCode ?? null
+  )
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>(() => {
+    if (typeof window === "undefined") return []
+    try {
+      const raw = localStorage.getItem(`na:chat:${personaId}`)
+      return raw ? JSON.parse(raw) : (savedVersion?.chatSnapshot ?? [])
+    } catch { return [] }
+  })
+
   const [showCode, setShowCode] = useState(false)
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
   const [inspectMode, setInspectMode] = useState(false)
   const [inspectContext, setInspectContext] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const isFirstRender = useRef(true)
-  const isRestoringRef = useRef(false)
-  const isFirstSchemaRender = useRef(true)
 
-  const { versions, currentIndex, push: pushVersion, restore: restoreVersion, clear: clearVersions } = useVersionHistory(`na:history:${personaId}`)
+  // Persist chat history for this persona
+  useEffect(() => {
+    try { localStorage.setItem(`na:chat:${personaId}`, JSON.stringify(chatHistory)) } catch {}
+  }, [chatHistory, personaId])
 
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return }
@@ -51,18 +67,6 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
       .then((data) => { setThreads(data); setLoading(false) })
       .catch(() => setLoading(false))
   }, [schema.data_source])
-
-  // Reset conversation when persona switches (schema changes from parent)
-  useEffect(() => {
-    if (isRestoringRef.current) { isRestoringRef.current = false; return }
-    if (isFirstSchemaRender.current) { isFirstSchemaRender.current = false; return }
-    setChatHistory([])
-    setComponentCode(null)
-    setRenderMode("schema")
-    setInspectContext(null)
-    setInspectMode(false)
-    clearVersions()
-  }, [schema, clearVersions])
 
   const displayed = applySchema(threads, schema)
 
@@ -143,7 +147,6 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
   function handleRestore(index: number) {
     const v = versions[index]
     if (!v) return
-    isRestoringRef.current = true
     setRenderMode(v.renderMode)
     setComponentCode(v.componentCode)
     setChatHistory(() => {
@@ -196,6 +199,7 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
                 setRenderMode("schema")
                 setInspectContext(null)
                 setInspectMode(false)
+                clearVersions()
               }}
               className="text-xs text-zinc-400 hover:text-zinc-600 hover:underline"
             >

@@ -115,6 +115,7 @@ export default function Home() {
 
         <div className="flex-1 overflow-hidden min-h-0">
           <MalleableRuntime
+            key={activePersona}
             schema={schema}
             onSchemaChange={(s) => { setSchema(s); updateSchema(activePersona, s) }}
             personaId={activePersona}
