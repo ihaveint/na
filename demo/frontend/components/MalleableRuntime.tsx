@@ -58,6 +58,7 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
   const [showHistory, setShowHistory] = useState(false)
   const [shareState, setShareState] = useState<"idle" | "loading" | "copied" | "error">("idle")
   const [shareUrl, setShareUrl] = useState<string | null>(null)
+  const [shareCopied, setShareCopied] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const isFirstRender = useRef(true)
 
@@ -314,10 +315,14 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
                 autoFocus
               />
               <button
-                onClick={() => navigator.clipboard.writeText(shareUrl).catch(() => {})}
+                onClick={() => {
+                  navigator.clipboard.writeText(shareUrl).catch(() => {})
+                  setShareCopied(true)
+                  setTimeout(() => setShareCopied(false), 2000)
+                }}
                 className="text-xs px-2 py-1 rounded bg-violet-600 text-white hover:bg-violet-700 whitespace-nowrap"
               >
-                Copy
+                {shareCopied ? "Copied!" : "Copy"}
               </button>
             </div>
           )}
