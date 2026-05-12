@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
 import type { Thread, UISchema, Version, ChatMessage } from "@/lib/types"
+import ThreadDetailPanel from "./ThreadDetailPanel"
 import { applySchema } from "@/lib/utils"
 import { useVersionHistory } from "@/lib/useVersionHistory"
 import ListView from "./layouts/ListView"
@@ -61,6 +62,7 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
   const [inspectMode, setInspectMode] = useState(false)
   const [inspectContext, setInspectContext] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  const [selectedThread, setSelectedThread] = useState<Thread | null>(null)
   const [shareState, setShareState] = useState<"idle" | "loading" | "copied" | "error">("idle")
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [shareCopied, setShareCopied] = useState(false)
@@ -348,11 +350,11 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
         ) : renderMode === "component" && componentCode ? (
           <DynamicView code={componentCode} threads={displayed} />
         ) : schema.layout === "kanban" ? (
-          <KanbanView threads={displayed} schema={schema} />
+          <KanbanView threads={displayed} schema={schema} onThreadClick={setSelectedThread} />
         ) : schema.layout === "table" ? (
-          <TableView threads={displayed} schema={schema} />
+          <TableView threads={displayed} schema={schema} onThreadClick={setSelectedThread} />
         ) : (
-          <ListView threads={displayed} schema={schema} />
+          <ListView threads={displayed} schema={schema} onThreadClick={setSelectedThread} />
         )}
 
         <InspectOverlay active={inspectMode} onElementClick={handleElementClick} />
@@ -364,6 +366,11 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
         open={showHistory}
         onClose={() => setShowHistory(false)}
         onRestore={handleRestore}
+      />
+
+      <ThreadDetailPanel
+        thread={selectedThread}
+        onClose={() => setSelectedThread(null)}
       />
 
       {/* Floating chat */}

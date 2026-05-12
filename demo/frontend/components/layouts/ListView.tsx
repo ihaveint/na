@@ -5,16 +5,19 @@ import { cn, urgencyColor, fieldLabel, formatDate } from "@/lib/utils"
 interface Props {
   threads: Thread[]
   schema: UISchema
+  onThreadClick?: (thread: Thread) => void
 }
 
-export default function ListView({ threads, schema }: Props) {
+export default function ListView({ threads, schema, onThreadClick }: Props) {
   return (
     <div className="flex flex-col divide-y divide-zinc-100">
       {threads.map((t) => (
         <div
           key={t.id}
+          onClick={() => onThreadClick?.(t)}
           className={cn(
             "flex gap-4 px-4 py-3 hover:bg-zinc-50 transition-colors",
+            onThreadClick && "cursor-pointer",
             !t.is_read && "bg-blue-50/40"
           )}
         >

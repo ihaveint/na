@@ -5,6 +5,7 @@ import { cn, groupThreads, urgencyColor, formatDate } from "@/lib/utils"
 interface Props {
   threads: Thread[]
   schema: UISchema
+  onThreadClick?: (thread: Thread) => void
 }
 
 const COLUMN_COLORS = [
@@ -20,7 +21,7 @@ function columnColor(index: number) {
   return COLUMN_COLORS[index % COLUMN_COLORS.length]
 }
 
-export default function KanbanView({ threads, schema }: Props) {
+export default function KanbanView({ threads, schema, onThreadClick }: Props) {
   const groups = groupThreads(threads, schema.group_by)
   const columns = Object.entries(groups)
 
@@ -38,6 +39,7 @@ export default function KanbanView({ threads, schema }: Props) {
               {items.map((t) => (
                 <div
                   key={t.id}
+                  onClick={() => onThreadClick?.(t)}
                   className={cn(
                     "bg-white border border-zinc-100 rounded-md p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer",
                     !t.is_read && "border-l-2 border-l-blue-400"

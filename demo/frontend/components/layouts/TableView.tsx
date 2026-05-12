@@ -5,9 +5,10 @@ import { cn, urgencyColor, fieldLabel, formatDate } from "@/lib/utils"
 interface Props {
   threads: Thread[]
   schema: UISchema
+  onThreadClick?: (thread: Thread) => void
 }
 
-export default function TableView({ threads, schema }: Props) {
+export default function TableView({ threads, schema, onThreadClick }: Props) {
   const cols = schema.card_fields
 
   return (
@@ -24,7 +25,11 @@ export default function TableView({ threads, schema }: Props) {
         </thead>
         <tbody className="divide-y divide-zinc-100">
           {threads.map((t) => (
-            <tr key={t.id} className={cn("hover:bg-zinc-50 transition-colors", !t.is_read && "bg-blue-50/30")}>
+            <tr
+              key={t.id}
+              onClick={() => onThreadClick?.(t)}
+              className={cn("hover:bg-zinc-50 transition-colors", onThreadClick && "cursor-pointer", !t.is_read && "bg-blue-50/30")}
+            >
               {cols.map((col) => (
                 <td key={col} className="px-4 py-2 max-w-xs">
                   <CellValue thread={t} field={col} />

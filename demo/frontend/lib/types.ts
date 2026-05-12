@@ -1,3 +1,12 @@
+export interface Message {
+  id: string
+  sender: string
+  sender_name: string
+  date: string
+  body: string
+  is_self: boolean
+}
+
 export type ChatMessage = {
   role: "user" | "assistant"
   content: string
@@ -18,6 +27,7 @@ export interface Thread {
   is_snoozed: boolean
   due_date: string | null
   tags: string[]
+  messages: Message[]
 }
 
 export interface UISchema {

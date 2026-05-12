@@ -17,6 +17,7 @@ class Thread(BaseModel):
     is_snoozed: bool = Field(False, description="Whether the thread is snoozed")
     due_date: Optional[datetime] = Field(None, description="User-set due date")
     tags: list[str] = Field(default_factory=list, description="User-applied tags")
+    messages: list["Message"] = Field(default_factory=list, description="Conversation messages in this thread")
 
 
 class SnoozeRequest(BaseModel):
@@ -54,6 +55,15 @@ class ConversationMessage(BaseModel):
 class GenerateComponentRequest(BaseModel):
     messages: list[ConversationMessage]
     current_code: Optional[str] = None
+
+
+class Message(BaseModel):
+    id: str
+    sender: str
+    sender_name: str
+    date: datetime
+    body: str
+    is_self: bool  # True = sent by the "user" (styled differently in UI)
 
 
 class ChatRequest(BaseModel):
