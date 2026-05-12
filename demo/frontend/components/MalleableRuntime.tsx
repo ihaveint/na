@@ -57,6 +57,7 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
   const [inspectContext, setInspectContext] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const [shareState, setShareState] = useState<"idle" | "loading" | "copied" | "error">("idle")
+  const [shareUrl, setShareUrl] = useState<string | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const isFirstRender = useRef(true)
 
@@ -187,16 +188,8 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
       })
       const { id } = await res.json()
       const url = `${window.location.origin}${window.location.pathname}?share=${id}`
-      // clipboard.writeText requires an active user gesture; use execCommand fallback instead
-      const ta = document.createElement("textarea")
-      ta.value = url
-      ta.style.cssText = "position:fixed;opacity:0"
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand("copy")
-      document.body.removeChild(ta)
+      setShareUrl(url)
       setShareState("copied")
-      setTimeout(() => setShareState("idle"), 2000)
     } catch (e) {
       console.error("Share failed:", e)
       setShareState("error")
@@ -285,30 +278,50 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
         </button>
 
         {/* Share button */}
-        <button
-          onClick={handleShare}
-          disabled={shareState === "loading"}
-          title="Copy shareable link"
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors text-zinc-500 border-zinc-200 hover:bg-zinc-100 disabled:opacity-50"
-        >
-          {shareState === "copied" ? (
-            <>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
-              Copied!
-            </>
-          ) : shareState === "error" ? (
-            <span className="text-red-500">Failed</span>
-          ) : (
-            <>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>
-              </svg>
-              {shareState === "loading" ? "Sharing…" : "Share"}
-            </>
+        <div className="relative">
+          <button
+            onClick={shareUrl ? () => { setShareUrl(null); setShareState("idle") } : handleShare}
+            disabled={shareState === "loading"}
+            title="Copy shareable link"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors text-zinc-500 border-zinc-200 hover:bg-zinc-100 disabled:opacity-50"
+          >
+            {shareState === "copied" ? (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Link ready ×
+              </>
+            ) : shareState === "error" ? (
+              <span className="text-red-500">Failed</span>
+            ) : (
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>
+                </svg>
+                {shareState === "loading" ? "Sharing…" : "Share"}
+              </>
+            )}
+          </button>
+
+          {shareUrl && (
+            <div className="absolute right-0 top-full mt-1.5 z-50 bg-white border border-zinc-200 rounded-lg shadow-lg p-2 flex items-center gap-1.5" style={{ minWidth: 280 }}>
+              <input
+                readOnly
+                value={shareUrl}
+                onFocus={(e) => e.target.select()}
+                className="flex-1 text-xs text-zinc-700 font-mono bg-zinc-50 border border-zinc-200 rounded px-2 py-1 outline-none"
+                autoFocus
+              />
+              <button
+                onClick={() => navigator.clipboard.writeText(shareUrl).catch(() => {})}
+                className="text-xs px-2 py-1 rounded bg-violet-600 text-white hover:bg-violet-700 whitespace-nowrap"
+              >
+                Copy
+              </button>
+            </div>
           )}
-        </button>
+        </div>
       </div>
 
       {/* Generated code panel */}
