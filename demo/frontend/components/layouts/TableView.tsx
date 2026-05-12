@@ -10,36 +10,76 @@ interface Props {
 
 export default function TableView({ threads, schema, onThreadClick }: Props) {
   const cols = schema.card_fields
+  // On mobile, always show subject + sender_name as primary, then remaining fields as metadata
+  const primaryCols = ["subject", "sender_name"].filter((c) => cols.includes(c))
+  const metaCols = cols.filter((c) => !["subject", "sender_name"].includes(c))
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-zinc-200 bg-zinc-50">
-            {cols.map((col) => (
-              <th key={col} className="text-left px-4 py-2 text-xs font-semibold text-zinc-500 uppercase tracking-wide">
-                {fieldLabel(col)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-zinc-100">
-          {threads.map((t) => (
-            <tr
-              key={t.id}
-              onClick={() => onThreadClick?.(t)}
-              className={cn("hover:bg-zinc-50 transition-colors", onThreadClick && "cursor-pointer", !t.is_read && "bg-blue-50/30")}
-            >
+    <>
+      {/* Desktop: full table */}
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-zinc-200 bg-zinc-50">
               {cols.map((col) => (
-                <td key={col} className="px-4 py-2 max-w-xs">
-                  <CellValue thread={t} field={col} />
-                </td>
+                <th key={col} className="text-left px-4 py-2 text-xs font-semibold text-zinc-500 uppercase tracking-wide">
+                  {fieldLabel(col)}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody className="divide-y divide-zinc-100">
+            {threads.map((t) => (
+              <tr
+                key={t.id}
+                onClick={() => onThreadClick?.(t)}
+                className={cn("hover:bg-zinc-50 transition-colors", onThreadClick && "cursor-pointer", !t.is_read && "bg-blue-50/30")}
+              >
+                {cols.map((col) => (
+                  <td key={col} className="px-4 py-2 max-w-xs">
+                    <CellValue thread={t} field={col} />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile: card list */}
+      <div className="md:hidden divide-y divide-zinc-100">
+        {threads.map((t) => (
+          <div
+            key={t.id}
+            onClick={() => onThreadClick?.(t)}
+            className={cn(
+              "px-4 py-3 flex flex-col gap-1.5",
+              onThreadClick && "cursor-pointer",
+              !t.is_read && "bg-blue-50/30",
+              "hover:bg-zinc-50 transition-colors"
+            )}
+          >
+            {/* Subject row */}
+            {primaryCols.includes("subject") && (
+              <p className={cn("text-sm leading-snug truncate", !t.is_read ? "font-semibold text-zinc-900" : "text-zinc-700")}>
+                {t.subject}
+              </p>
+            )}
+            {/* Sender + meta row */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {primaryCols.includes("sender_name") && (
+                <span className="text-xs text-zinc-500">{t.sender_name}</span>
+              )}
+              {metaCols.map((col) => (
+                <span key={col} className="text-xs text-zinc-400">
+                  <CellValue thread={t} field={col} />
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   )
 }
 
