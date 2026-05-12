@@ -27,6 +27,7 @@ export default function ChatModal({
 }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [input, setInput] = useState("")
+  const [isMobile, setIsMobile] = useState(false)
   // null = use CSS default (bottom-left corner via fixed + bottom/left)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -42,6 +43,15 @@ export default function ChatModal({
 
   const lastMessage = messages[messages.length - 1]
   const hasUnread = !isOpen && lastMessage?.role === "assistant" && !lastMessage.generatedComponent
+
+  // Track mobile breakpoint
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)")
+    setIsMobile(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mq.addEventListener("change", handler)
+    return () => mq.removeEventListener("change", handler)
+  }, [])
 
   // Auto-open on agent question or inspect click
   useEffect(() => {
@@ -229,10 +239,10 @@ export default function ChatModal({
 
   return (
     <>
-      {/* ── Desktop (md+): floating draggable modal ── */}
-      {isOpen && (
+      {/* ── Desktop: floating draggable modal ── */}
+      {!isMobile && isOpen && (
         <div
-          className="hidden md:flex bg-white rounded-2xl shadow-2xl border border-zinc-200 flex-col overflow-hidden"
+          className="flex bg-white rounded-2xl shadow-2xl border border-zinc-200 flex-col overflow-hidden"
           style={{ ...modalStyle, width: MODAL_WIDTH, maxHeight: MODAL_HEIGHT }}
         >
           {chatBody}
@@ -240,61 +250,65 @@ export default function ChatModal({
       )}
 
       {/* Desktop draggable button */}
-      <button
-        ref={buttonRef}
-        onMouseDown={handleMouseDown}
-        className={`hidden md:flex items-center justify-center rounded-full shadow-lg transition-colors select-none relative ${
-          isOpen ? "bg-zinc-800 text-white" : "bg-violet-600 text-white hover:bg-violet-700"
-        }`}
-        style={{ ...buttonStyle, width: BUTTON_SIZE, height: BUTTON_SIZE, cursor: "grab" }}
-      >
-        {isOpen ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M18 6 6 18M6 6l12 12"/>
-          </svg>
-        ) : (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
-        )}
-        {hasUnread && (
-          <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />
-        )}
-      </button>
-
-      {/* ── Mobile (< md): bottom sheet ── */}
-      <div className="md:hidden">
-        {/* Backdrop */}
-        {isOpen && (
-          <div className="fixed inset-0 bg-black/30 z-[9996]" onClick={() => setIsOpen(false)} />
-        )}
-
-        {/* Sheet */}
-        <div
-          className={`fixed bottom-0 left-0 right-0 z-[9997] bg-white rounded-t-2xl shadow-2xl flex flex-col transition-transform duration-300 ${
-            isOpen ? "translate-y-0" : "translate-y-full"
+      {!isMobile && (
+        <button
+          ref={buttonRef}
+          onMouseDown={handleMouseDown}
+          className={`flex items-center justify-center rounded-full shadow-lg transition-colors select-none relative ${
+            isOpen ? "bg-zinc-800 text-white" : "bg-violet-600 text-white hover:bg-violet-700"
           }`}
-          style={{ maxHeight: "75dvh", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+          style={{ ...buttonStyle, width: BUTTON_SIZE, height: BUTTON_SIZE, cursor: "grab" }}
         >
-          {chatBody}
-        </div>
-
-        {/* Mobile FAB */}
-        {!isOpen && (
-          <button
-            onClick={() => setIsOpen(true)}
-            className="fixed right-6 z-[9997] flex items-center justify-center rounded-full shadow-lg bg-violet-600 text-white relative"
-            style={{ width: BUTTON_SIZE, height: BUTTON_SIZE, bottom: "calc(1.5rem + env(safe-area-inset-bottom, 0px))" }}
-          >
+          {isOpen ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M18 6 6 18M6 6l12 12"/>
+            </svg>
+          ) : (
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
-            {hasUnread && (
-              <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />
-            )}
-          </button>
-        )}
-      </div>
+          )}
+          {hasUnread && (
+            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />
+          )}
+        </button>
+      )}
+
+      {/* ── Mobile: bottom sheet ── */}
+      {isMobile && (
+        <>
+          {/* Backdrop */}
+          {isOpen && (
+            <div className="fixed inset-0 bg-black/30 z-[9996]" onClick={() => setIsOpen(false)} />
+          )}
+
+          {/* Sheet */}
+          <div
+            className={`fixed bottom-0 left-0 right-0 z-[9997] bg-white rounded-t-2xl shadow-2xl flex flex-col transition-transform duration-300 ${
+              isOpen ? "translate-y-0" : "translate-y-full"
+            }`}
+            style={{ maxHeight: "75dvh", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+          >
+            {chatBody}
+          </div>
+
+          {/* Mobile FAB */}
+          {!isOpen && (
+            <button
+              onClick={() => setIsOpen(true)}
+              className="fixed right-6 z-[9997] flex items-center justify-center rounded-full shadow-lg bg-violet-600 text-white relative"
+              style={{ width: BUTTON_SIZE, height: BUTTON_SIZE, bottom: "calc(1.5rem + env(safe-area-inset-bottom, 0px))" }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+              {hasUnread && (
+                <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 rounded-full border-2 border-white" />
+              )}
+            </button>
+          )}
+        </>
+      )}
     </>
   )
 }
