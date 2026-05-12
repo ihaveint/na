@@ -187,7 +187,14 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
       })
       const { id } = await res.json()
       const url = `${window.location.origin}${window.location.pathname}?share=${id}`
-      await navigator.clipboard.writeText(url)
+      // clipboard.writeText requires an active user gesture; use execCommand fallback instead
+      const ta = document.createElement("textarea")
+      ta.value = url
+      ta.style.cssText = "position:fixed;opacity:0"
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand("copy")
+      document.body.removeChild(ta)
       setShareState("copied")
       setTimeout(() => setShareState("idle"), 2000)
     } catch (e) {
