@@ -57,19 +57,26 @@ export default function HistoryDrawer({ versions, currentIndex, open, onClose, o
 
               {displayed.map((v) => {
                 const isCurrent = v.originalIndex === currentIndex
+                const isFuture = v.originalIndex > currentIndex
                 return (
-                  <div key={v.id} className="flex gap-3 px-4 py-3 group">
+                  <div key={v.id} className={`flex gap-3 px-4 py-3 group ${isFuture ? "opacity-40" : ""}`}>
                     <div className="flex-shrink-0 mt-1 relative z-10">
                       <div className={`w-3 h-3 rounded-full border-2 transition-colors ${
                         isCurrent
                           ? "bg-violet-500 border-violet-500"
+                          : isFuture
+                          ? "bg-white border-zinc-200"
                           : "bg-white border-zinc-300 group-hover:border-violet-300"
                       }`} />
                     </div>
 
                     <div className="flex-1 min-w-0 pb-1">
                       <div className="flex items-start justify-between gap-2">
-                        <p className={`text-xs leading-snug ${isCurrent ? "text-zinc-800 font-medium" : "text-zinc-500"}`}>
+                        <p className={`text-xs leading-snug ${
+                          isCurrent ? "text-zinc-800 font-medium"
+                          : isFuture ? "text-zinc-400 line-through"
+                          : "text-zinc-500"
+                        }`}>
                           {v.label}
                         </p>
                         {isCurrent && (
@@ -91,7 +98,7 @@ export default function HistoryDrawer({ versions, currentIndex, open, onClose, o
                           <span className="text-[10px] text-zinc-400">{relativeTime(v.timestamp)}</span>
                         </div>
 
-                        {!isCurrent && (
+                        {!isCurrent && !isFuture && (
                           <button
                             onClick={() => onRestore(v.originalIndex)}
                             className="text-[10px] text-violet-600 hover:text-violet-800 font-medium opacity-0 group-hover:opacity-100 transition-opacity"

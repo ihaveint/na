@@ -154,29 +154,40 @@ export default function ChatModal({
                   : "Describe how you'd like your email displayed. The agent will ask follow-up questions if needed."}
               </p>
             ) : (
-              messages.map((msg, i) => (
-                <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  {msg.role === "assistant" && (
-                    <div className="w-5 h-5 rounded-full bg-violet-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <span className="text-white text-[10px] font-bold">A</span>
+              messages.map((msg, i) => {
+                if (msg.isSystem) {
+                  return (
+                    <div key={i} className="flex items-center gap-2 py-1">
+                      <div className="flex-1 h-px bg-zinc-200" />
+                      <span className="text-[10px] text-zinc-400 whitespace-nowrap">{msg.content}</span>
+                      <div className="flex-1 h-px bg-zinc-200" />
                     </div>
-                  )}
-                  <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs leading-snug ${
-                    msg.role === "user"
-                      ? "bg-violet-600 text-white rounded-br-sm"
-                      : msg.generatedComponent
-                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-bl-sm"
-                      : "bg-zinc-100 text-zinc-800 rounded-bl-sm"
-                  }`}>
-                    {msg.generatedComponent && (
-                      <span className="text-[10px] font-semibold text-emerald-600 block mb-0.5">
-                        Component generated
-                      </span>
+                  )
+                }
+                return (
+                  <div key={i} className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    {msg.role === "assistant" && (
+                      <div className="w-5 h-5 rounded-full bg-violet-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span className="text-white text-[10px] font-bold">A</span>
+                      </div>
                     )}
-                    {msg.content}
+                    <div className={`max-w-[85%] px-3 py-2 rounded-2xl text-xs leading-snug ${
+                      msg.role === "user"
+                        ? "bg-violet-600 text-white rounded-br-sm"
+                        : msg.generatedComponent
+                        ? "bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-bl-sm"
+                        : "bg-zinc-100 text-zinc-800 rounded-bl-sm"
+                    }`}>
+                      {msg.generatedComponent && (
+                        <span className="text-[10px] font-semibold text-emerald-600 block mb-0.5">
+                          Component generated
+                        </span>
+                      )}
+                      {msg.content}
+                    </div>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
             <div ref={bottomRef} />
           </div>

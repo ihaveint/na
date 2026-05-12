@@ -31,6 +31,7 @@ export interface Version {
   schema: UISchema
   componentCode: string | null
   renderMode: "schema" | "component"
+  chatLength: number
 }
 
 export interface Persona {

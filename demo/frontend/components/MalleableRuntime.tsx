@@ -119,12 +119,12 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
         setRenderMode("schema")
         setComponentCode(null)
         flash()
-        pushVersion({ label: data.message, schema: data.schema, componentCode: null, renderMode: "schema" })
+        pushVersion({ label: data.message, schema: data.schema, componentCode: null, renderMode: "schema", chatLength: nextHistory.length + 1 })
       } else if (data.action === "component" && data.code) {
         setComponentCode(data.code)
         setRenderMode("component")
         flash()
-        pushVersion({ label: data.message, schema, componentCode: data.code, renderMode: "component" })
+        pushVersion({ label: data.message, schema, componentCode: data.code, renderMode: "component", chatLength: nextHistory.length + 1 })
       }
     } catch (e) {
       alert(`Error: ${e}`)
@@ -139,7 +139,10 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
     isRestoringRef.current = true
     setRenderMode(v.renderMode)
     setComponentCode(v.componentCode)
-    setChatHistory([])
+    setChatHistory(prev => [
+      ...prev.slice(0, v.chatLength),
+      { role: "assistant", content: `↩ Restored to: ${v.label}`, isSystem: true },
+    ])
     setInspectContext(null)
     setInspectMode(false)
     setShowHistory(false)

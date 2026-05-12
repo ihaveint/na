@@ -5,6 +5,7 @@ export type ChatMessage = {
   role: "user" | "assistant"
   content: string
   generatedComponent?: boolean
+  isSystem?: boolean
 }
 
 interface Props {
