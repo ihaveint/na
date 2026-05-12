@@ -159,7 +159,9 @@ export default function ChatModal({
                   return (
                     <div key={i} className="flex items-center gap-2 py-1">
                       <div className="flex-1 h-px bg-zinc-200" />
-                      <span className="text-[10px] text-zinc-400 whitespace-nowrap">{msg.content}</span>
+                      <span className="text-[10px] text-zinc-400 whitespace-nowrap" title={msg.content}>
+                        {msg.content.length > 42 ? msg.content.slice(0, 42) + "…" : msg.content}
+                      </span>
                       <div className="flex-1 h-px bg-zinc-200" />
                     </div>
                   )
