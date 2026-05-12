@@ -56,7 +56,7 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
   const [inspectMode, setInspectMode] = useState(false)
   const [inspectContext, setInspectContext] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
-  const [shareState, setShareState] = useState<"idle" | "loading" | "copied">("idle")
+  const [shareState, setShareState] = useState<"idle" | "loading" | "copied" | "error">("idle")
   const contentRef = useRef<HTMLDivElement>(null)
   const isFirstRender = useRef(true)
 
@@ -190,8 +190,10 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
       await navigator.clipboard.writeText(url)
       setShareState("copied")
       setTimeout(() => setShareState("idle"), 2000)
-    } catch {
-      setShareState("idle")
+    } catch (e) {
+      console.error("Share failed:", e)
+      setShareState("error")
+      setTimeout(() => setShareState("idle"), 2000)
     }
   }
 
@@ -289,12 +291,14 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
               </svg>
               Copied!
             </>
+          ) : shareState === "error" ? (
+            <span className="text-red-500">Failed</span>
           ) : (
             <>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>
               </svg>
-              Share
+              {shareState === "loading" ? "Sharing…" : "Share"}
             </>
           )}
         </button>
