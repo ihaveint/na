@@ -348,6 +348,9 @@ TOOLTIPS — MANDATORY pattern (position:absolute is FORBIDDEN for tooltips — 
   <trigger onMouseMove={e => setTipPos({x:e.clientX, y:e.clientY})} onMouseLeave={() => setTipPos(null)}>...</trigger>
   {tipPos && <div style={{position:'fixed',left:tipPos.x+12,top:tipPos.y-28,zIndex:9999,pointerEvents:'none'}} className="bg-zinc-800 text-white text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap">{content}</div>}
 
+UNDEFINED REFERENCES — every function/component you call or render MUST be defined in the same output.
+If you write <HeatmapModal />, a function HeatmapModal must exist in your code. No exceptions.
+
 MANDATORY structure — you MUST decompose into at least 2 named functions:
 - Extract every repeating or distinct UI element into its own function (e.g. ThreadCard, TableRow, GroupHeader, SidePanel)
 - The main entry point MUST be named exactly `Layout`
@@ -476,6 +479,7 @@ def _make_subcomponent_modify_prompt(components: dict[str, str], target: str | N
         "- Available in scope (do NOT import): React, useState, useEffect, useMemo, formatDate(iso), urgencyColor(score), groupThreads(threads, field)\n"
         + tooltip_rule + "\n"
         "- BORDER RADIUS: always use inline style={{borderRadius:'1rem'}} NOT Tailwind rounded-* classes. Tailwind rounded-* is unreliable in generated components.\n"
+        "- UNDEFINED REFERENCES: every function/component you call or render MUST be defined in your output. If you reference <Foo />, Foo must appear as a function in the changes array. Never reference a function that isn't defined.\n"
         "- Return the COMPLETE modified function for each changed component, not snippets.\n\n"
         "Return ONLY valid JSON — no markdown fences, no text outside JSON:\n"
         + return_instruction
