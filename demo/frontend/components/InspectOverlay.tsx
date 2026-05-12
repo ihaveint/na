@@ -87,7 +87,8 @@ export default function InspectOverlay({ active, onElementClick }: Props) {
       {/* Transparent intercept layer */}
       <div
         ref={overlayRef}
-        className="absolute inset-0 z-40 cursor-crosshair"
+        className="absolute inset-0 cursor-crosshair"
+        style={{ zIndex: 99999 }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         onClick={handleClick}
@@ -96,7 +97,8 @@ export default function InspectOverlay({ active, onElementClick }: Props) {
       {/* Highlight ring — fixed so viewport coords work regardless of scroll */}
       {highlight && (
         <div
-          className="pointer-events-none fixed z-50 rounded-sm"
+          className="pointer-events-none fixed rounded-sm"
+          style={{ zIndex: 99999 }}
           style={{
             top: highlight.top - 2,
             left: highlight.left - 2,
@@ -111,7 +113,8 @@ export default function InspectOverlay({ active, onElementClick }: Props) {
       {/* Tooltip */}
       {tooltip && (
         <div
-          className="pointer-events-none fixed z-50 px-2 py-1 bg-zinc-900 text-white text-xs rounded-md shadow-lg max-w-xs truncate"
+          className="pointer-events-none fixed px-2 py-1 bg-zinc-900 text-white text-xs rounded-md shadow-lg max-w-xs truncate"
+          style={{ zIndex: 99999 }}
           style={{ top: tooltip.y, left: tooltip.x, transform: "translateX(-50%)" }}
         >
           {tooltip.text}
