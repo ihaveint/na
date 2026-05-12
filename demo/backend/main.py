@@ -745,11 +745,21 @@ async def chat(body: ChatRequest):
             # Support legacy single-component format too
             if not changes and parsed.get("name") and parsed.get("code"):
                 changes = [{"name": parsed["name"], "code": parsed["code"]}]
-            valid = [(c["name"], c["code"]) for c in changes if c.get("name") in components and c.get("code")]
+            updates = [(c["name"], c["code"]) for c in changes if c.get("name") in components and c.get("code")]
+            additions = [(c["name"], c["code"]) for c in changes if c.get("name") not in components and c.get("code")]
+            valid = updates or additions
             if valid:
                 result_code = body.current_code
-                for func_name, new_func in valid:
+                for func_name, new_func in updates:
                     result_code = _replace_subcomponent(result_code, func_name, new_func)
+                # Append brand-new components before Layout so they're available when referenced
+                if additions:
+                    new_defs = "\n\n".join(code for _, code in additions)
+                    layout_match = re.search(r'\nfunction Layout\b', result_code)
+                    if layout_match:
+                        result_code = result_code[:layout_match.start()] + "\n\n" + new_defs + result_code[layout_match.start():]
+                    else:
+                        result_code = new_defs + "\n\n" + result_code
                 undefined = _find_undefined_components(result_code)
                 if undefined:
                     fix_msg = (
