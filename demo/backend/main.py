@@ -339,6 +339,8 @@ Use it ONLY in className, never in style. Example: <span className={urgencyColor
 
 CRITICAL styling: use inline style={{}} for ALL layout properties (display, gridTemplateColumns, flex, width, height).
 Tailwind is safe only for: colors (bg-*, text-*, border-*), spacing (p-*, m-*, gap-*), typography, borders.
+BORDER RADIUS — always use inline style for rounded corners: style={{borderRadius:'1rem'}} NOT className="rounded-xl".
+Tailwind rounded-* classes are unreliable in generated components because the CSS may not be pre-compiled.
 Always add p-4 at the root. Renders inside a full-width full-height overflow-auto container.
 
 TOOLTIPS — MANDATORY pattern (position:absolute is FORBIDDEN for tooltips — it gets clipped by overflow containers and breaks inside tables):
@@ -473,6 +475,7 @@ def _make_subcomponent_modify_prompt(components: dict[str, str], target: str | N
         "- PROP DRILLING: If adding a new prop to a child component, you MUST also update every parent that renders it to pass that prop through. Include all affected components in your changes array.\n"
         "- Available in scope (do NOT import): React, useState, useEffect, useMemo, formatDate(iso), urgencyColor(score), groupThreads(threads, field)\n"
         + tooltip_rule + "\n"
+        "- BORDER RADIUS: always use inline style={{borderRadius:'1rem'}} NOT Tailwind rounded-* classes. Tailwind rounded-* is unreliable in generated components.\n"
         "- Return the COMPLETE modified function for each changed component, not snippets.\n\n"
         "Return ONLY valid JSON — no markdown fences, no text outside JSON:\n"
         + return_instruction
