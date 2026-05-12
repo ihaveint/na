@@ -139,6 +139,9 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
     isRestoringRef.current = true
     setRenderMode(v.renderMode)
     setComponentCode(v.componentCode)
+    setChatHistory([])
+    setInspectContext(null)
+    setInspectMode(false)
     setShowHistory(false)
     if (v.schema !== schema) onSchemaChange(v.schema)
     restoreVersion(index)
