@@ -145,6 +145,7 @@ export default function Home() {
           <MalleableRuntime
             key={activePersona}
             schema={schema}
+            defaultSchema={PERSONAS.find((p) => p.id === activePersona)!.schema}
             onSchemaChange={(s) => { setSchema(s); updateSchema(activePersona, s) }}
             personaId={activePersona}
           />

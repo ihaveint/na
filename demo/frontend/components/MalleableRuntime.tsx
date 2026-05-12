@@ -16,11 +16,12 @@ const API = "http://localhost:8000"
 
 interface Props {
   schema: UISchema
+  defaultSchema: UISchema
   onSchemaChange: (s: UISchema) => void
   personaId: string
 }
 
-export default function MalleableRuntime({ schema, onSchemaChange, personaId }: Props) {
+export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange, personaId }: Props) {
   const [threads, setThreads] = useState<Thread[]>([])
   const [loading, setLoading] = useState(true)
   const [applying, setApplying] = useState(false)
@@ -236,12 +237,17 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
             </button>
             <button
               onClick={() => {
-                setChatHistory([])
+                onSchemaChange(defaultSchema)
                 setComponentCode(null)
                 setRenderMode("schema")
                 setInspectContext(null)
                 setInspectMode(false)
-                clearVersions()
+                const systemMessage: ChatMessage = { role: "assistant", content: "↩ Reset to default view", isSystem: true }
+                setChatHistory((prev) => {
+                  const filtered = prev.filter((m) => !(m.isSystem && m.content.startsWith("↩ Reset")))
+                  return [...filtered, systemMessage]
+                })
+                pushVersion({ label: "Reset to default view", schema: defaultSchema, componentCode: null, renderMode: "schema", chatSnapshot: chatHistory.filter((m) => !m.isSystem) })
               }}
               className="text-xs text-zinc-400 hover:text-zinc-600 hover:underline"
             >
