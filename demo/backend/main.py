@@ -683,7 +683,13 @@ def _parse_response(raw: str) -> dict:
     start = raw.find("{")
     if start > 0:
         raw = raw[start:]
-    return json.loads(raw.strip())
+    try:
+        return json.loads(raw.strip())
+    except json.JSONDecodeError:
+        # AI returned plain text (e.g. a clarifying question) instead of JSON
+        if raw.strip():
+            return {"action": "question", "message": raw.strip()}
+        raise
 
 
 @app.post("/chat")
