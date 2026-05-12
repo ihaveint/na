@@ -26,10 +26,12 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
   const [applying, setApplying] = useState(false)
   const [justApplied, setJustApplied] = useState(false)
 
-  // In share-mode tabs, use sessionStorage so state is tab-isolated
-  const store = typeof window !== "undefined" && sessionStorage.getItem("na:share-mode")
-    ? sessionStorage
-    : localStorage
+  // In share-mode tabs, use sessionStorage so state is tab-isolated.
+  // Lazy useState so localStorage/sessionStorage are never touched during SSR.
+  const [store] = useState<Storage>(() => {
+    if (typeof window === "undefined") return undefined as unknown as Storage
+    return sessionStorage.getItem("na:share-mode") ? sessionStorage : localStorage
+  })
 
   const { versions, currentIndex, push: pushVersion, restore: restoreVersion, clear: clearVersions } = useVersionHistory(`na:history:${personaId}`, store)
   const savedVersion = versions[currentIndex] ?? null
