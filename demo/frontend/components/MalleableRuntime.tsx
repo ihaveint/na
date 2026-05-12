@@ -25,7 +25,12 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
   const [applying, setApplying] = useState(false)
   const [justApplied, setJustApplied] = useState(false)
 
-  const { versions, currentIndex, push: pushVersion, restore: restoreVersion, clear: clearVersions } = useVersionHistory(`na:history:${personaId}`)
+  // In share-mode tabs, use sessionStorage so state is tab-isolated
+  const store = typeof window !== "undefined" && sessionStorage.getItem("na:share-mode")
+    ? sessionStorage
+    : localStorage
+
+  const { versions, currentIndex, push: pushVersion, restore: restoreVersion, clear: clearVersions } = useVersionHistory(`na:history:${personaId}`, store)
   const savedVersion = versions[currentIndex] ?? null
 
   // One-time read of a shared artifact dropped by page.tsx (?share= param)
@@ -47,7 +52,7 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>(() => {
     if (typeof window === "undefined") return []
     try {
-      const raw = localStorage.getItem(`na:chat:${personaId}`)
+      const raw = store.getItem(`na:chat:${personaId}`)
       return raw ? JSON.parse(raw) : (savedVersion?.chatSnapshot ?? [])
     } catch { return [] }
   })
@@ -62,10 +67,10 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
   const contentRef = useRef<HTMLDivElement>(null)
   const isFirstRender = useRef(true)
 
-  // Persist chat history for this persona
+  // Persist chat history for this persona (sessionStorage in share-mode tabs)
   useEffect(() => {
-    try { localStorage.setItem(`na:chat:${personaId}`, JSON.stringify(chatHistory)) } catch {}
-  }, [chatHistory, personaId])
+    try { store.setItem(`na:chat:${personaId}`, JSON.stringify(chatHistory)) } catch {}
+  }, [chatHistory, personaId, store])
 
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return }

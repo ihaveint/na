@@ -7,17 +7,19 @@ interface HistoryState {
   currentIndex: number  // index into versions; -1 = empty
 }
 
-export function useVersionHistory(storageKey: string) {
+export function useVersionHistory(storageKey: string, storage?: Storage) {
+  const store = storage ?? (typeof window !== "undefined" ? localStorage : null)
+
   const [state, setState] = useState<HistoryState>(() => {
-    if (typeof window === "undefined") return { versions: [], currentIndex: -1 }
+    if (!store) return { versions: [], currentIndex: -1 }
     try {
-      const raw = localStorage.getItem(storageKey)
+      const raw = store.getItem(storageKey)
       return raw ? JSON.parse(raw) : { versions: [], currentIndex: -1 }
     } catch { return { versions: [], currentIndex: -1 } }
   })
 
   const save = (s: HistoryState) => {
-    try { localStorage.setItem(storageKey, JSON.stringify(s)) } catch {}
+    try { store?.setItem(storageKey, JSON.stringify(s)) } catch {}
   }
 
   const push = useCallback((entry: Omit<Version, "id" | "timestamp">) => {
@@ -40,8 +42,8 @@ export function useVersionHistory(storageKey: string) {
   const clear = useCallback(() => {
     const empty: HistoryState = { versions: [], currentIndex: -1 }
     setState(empty)
-    try { localStorage.removeItem(storageKey) } catch {}
-  }, [storageKey])
+    try { store?.removeItem(storageKey) } catch {}
+  }, [storageKey, store])
 
   return {
     versions: state.versions,
