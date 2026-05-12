@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Thread(BaseModel):
@@ -73,6 +73,7 @@ class ChatRequest(BaseModel):
 
 
 class ShareArtifact(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     schema: UISchema
     componentCode: Optional[str] = None
     renderMode: str = "schema"
