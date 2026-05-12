@@ -146,10 +146,9 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
     isRestoringRef.current = true
     setRenderMode(v.renderMode)
     setComponentCode(v.componentCode)
-    setChatHistory(prev => {
-      const existingSystemMessages = prev.filter((m) => m.isSystem)
+    setChatHistory(() => {
       const newSystemMessage: ChatMessage = { role: "assistant", content: `↩ Restored to: ${v.label}`, isSystem: true }
-      return [...v.chatSnapshot, ...existingSystemMessages, newSystemMessage]
+      return [...v.chatSnapshot, newSystemMessage]
     })
     setInspectContext(null)
     setInspectMode(false)
