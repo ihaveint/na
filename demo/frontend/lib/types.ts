@@ -1,3 +1,10 @@
+export type ChatMessage = {
+  role: "user" | "assistant"
+  content: string
+  generatedComponent?: boolean
+  isSystem?: boolean
+}
+
 export interface Thread {
   id: string
   subject: string
@@ -31,7 +38,7 @@ export interface Version {
   schema: UISchema
   componentCode: string | null
   renderMode: "schema" | "component"
-  chatLength: number
+  chatSnapshot: ChatMessage[]
 }
 
 export interface Persona {

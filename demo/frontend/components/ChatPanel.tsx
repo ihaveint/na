@@ -1,12 +1,8 @@
 "use client"
 import { useEffect, useRef } from "react"
+import type { ChatMessage } from "@/lib/types"
 
-export type ChatMessage = {
-  role: "user" | "assistant"
-  content: string
-  generatedComponent?: boolean
-  isSystem?: boolean
-}
+export type { ChatMessage }
 
 interface Props {
   messages: ChatMessage[]

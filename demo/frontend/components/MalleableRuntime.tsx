@@ -1,6 +1,6 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
-import type { Thread, UISchema, Version } from "@/lib/types"
+import type { Thread, UISchema, Version, ChatMessage } from "@/lib/types"
 import { applySchema } from "@/lib/utils"
 import { useVersionHistory } from "@/lib/useVersionHistory"
 import ListView from "./layouts/ListView"
@@ -10,7 +10,6 @@ import DynamicView from "./DynamicView"
 import ChatModal from "./ChatModal"
 import InspectOverlay from "./InspectOverlay"
 import HistoryDrawer from "./HistoryDrawer"
-import type { ChatMessage } from "./ChatPanel"
 
 const API = "http://localhost:8000"
 
@@ -93,12 +92,17 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
     setChatHistory(nextHistory)
     setApplying(true)
 
+    // Strip system messages before sending — they're UI-only markers
+    const apiMessages = nextHistory
+      .filter((m) => !m.isSystem)
+      .map((m) => ({ role: m.role, content: m.content }))
+
     try {
       const res = await fetch(`${API}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: nextHistory.map((m) => ({ role: m.role, content: m.content })),
+          messages: apiMessages,
           current_schema: schema,
           current_code: componentCode,
         }),
@@ -112,19 +116,22 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
         content: data.message,
         generatedComponent: isGenerated,
       }
-      setChatHistory([...nextHistory, assistantMessage])
+      const fullHistory = [...nextHistory, assistantMessage]
+      setChatHistory(fullHistory)
+      // Snapshot excludes system messages so restoring to this version gives clean context
+      const chatSnapshot = fullHistory.filter((m) => !m.isSystem)
 
       if (data.action === "schema" && data.schema) {
         onSchemaChange(data.schema)
         setRenderMode("schema")
         setComponentCode(null)
         flash()
-        pushVersion({ label: data.message, schema: data.schema, componentCode: null, renderMode: "schema", chatLength: nextHistory.length + 1 })
+        pushVersion({ label: data.message, schema: data.schema, componentCode: null, renderMode: "schema", chatSnapshot })
       } else if (data.action === "component" && data.code) {
         setComponentCode(data.code)
         setRenderMode("component")
         flash()
-        pushVersion({ label: data.message, schema, componentCode: data.code, renderMode: "component", chatLength: nextHistory.length + 1 })
+        pushVersion({ label: data.message, schema, componentCode: data.code, renderMode: "component", chatSnapshot })
       }
     } catch (e) {
       alert(`Error: ${e}`)
@@ -139,10 +146,11 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
     isRestoringRef.current = true
     setRenderMode(v.renderMode)
     setComponentCode(v.componentCode)
-    setChatHistory(prev => [
-      ...prev.slice(0, v.chatLength),
-      { role: "assistant", content: `↩ Restored to: ${v.label}`, isSystem: true },
-    ])
+    setChatHistory(prev => {
+      const existingSystemMessages = prev.filter((m) => m.isSystem)
+      const newSystemMessage: ChatMessage = { role: "assistant", content: `↩ Restored to: ${v.label}`, isSystem: true }
+      return [...v.chatSnapshot, ...existingSystemMessages, newSystemMessage]
+    })
     setInspectContext(null)
     setInspectMode(false)
     setShowHistory(false)

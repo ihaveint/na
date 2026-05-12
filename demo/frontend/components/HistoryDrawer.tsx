@@ -98,12 +98,12 @@ export default function HistoryDrawer({ versions, currentIndex, open, onClose, o
                           <span className="text-[10px] text-zinc-400">{relativeTime(v.timestamp)}</span>
                         </div>
 
-                        {!isCurrent && !isFuture && (
+                        {!isCurrent && (
                           <button
                             onClick={() => onRestore(v.originalIndex)}
-                            className="text-[10px] text-violet-600 hover:text-violet-800 font-medium opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="text-[10px] font-medium opacity-0 group-hover:opacity-100 transition-opacity text-violet-600 hover:text-violet-800"
                           >
-                            Restore
+                            {isFuture ? "Jump to" : "Restore"}
                           </button>
                         )}
                       </div>
