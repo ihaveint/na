@@ -438,19 +438,17 @@ def _replace_subcomponent(code: str, name: str, new_func: str) -> str:
 def _make_subcomponent_modify_prompt(components: dict[str, str], target: str | None) -> str:
     if target and target in components:
         component_section = f"Modify this sub-component:\n```jsx\n{components[target]}\n```"
-        return_instruction = (
-            f'{{"action":"component","name":"{target}","message":"one sentence","code":"function {target}..."}}\n'
-            f'Or if ambiguous: {{"action":"question","message":"your question"}}'
+        other_sections = "\n\n".join(
+            f"[{name}] (context only — modify only if the change requires it)\n```jsx\n{func}\n```"
+            for name, func in components.items() if name != target
         )
+        if other_sections:
+            component_section += f"\n\nOther sub-components for context:\n\n{other_sections}"
     else:
         sections = "\n\n".join(
             f"[{name}]\n```jsx\n{func}\n```" for name, func in components.items()
         )
         component_section = f"The current component has these sub-components:\n\n{sections}"
-        return_instruction = (
-            '{"action":"component","name":"SubcomponentName","message":"one sentence","code":"function SubcomponentName..."}\n'
-            'Or if ambiguous: {"action":"question","message":"your question"}'
-        )
 
     tooltip_rule = (
         "- TOOLTIPS: ALWAYS use position:'fixed' and track mouse coords via onMouseMove — NEVER position:'absolute'."
@@ -460,16 +458,22 @@ def _make_subcomponent_modify_prompt(components: dict[str, str], target: str | N
         " render {pos && <div style={{position:'fixed',left:pos.x+12,top:pos.y-28,zIndex:9999,pointerEvents:'none'}}"
         " className=\"bg-zinc-800 text-white text-xs px-2 py-1 rounded shadow-lg whitespace-nowrap\">content</div>}"
     )
+    return_instruction = (
+        '{"action":"component","message":"one sentence","changes":[{"name":"ComponentName","code":"function ComponentName..."},...]}\n'
+        'Include every sub-component you modified in "changes". Most edits touch 1-2; never return unchanged components.\n'
+        'Or if ambiguous: {"action":"question","message":"your question"}'
+    )
     return (
-        "You are a surgical React component editor. Make the MINIMUM change to exactly one sub-component.\n\n"
+        "You are a surgical React component editor. Make the MINIMUM change needed.\n\n"
         + component_section
         + "\n\nRULES:\n"
         "- Preserve ALL existing logic, variable names, and styling not explicitly mentioned.\n"
-        "- Keep the `data-sc=\"ComponentName\"` attribute on the root element of the function you return.\n"
+        "- Keep the `data-sc=\"ComponentName\"` attribute on the root element of every function you return.\n"
         "- Do NOT redesign, reformat, or restyle anything not explicitly requested.\n"
+        "- PROP DRILLING: If adding a new prop to a child component, you MUST also update every parent that renders it to pass that prop through. Include all affected components in your changes array.\n"
         "- Available in scope (do NOT import): React, useState, useEffect, useMemo, formatDate(iso), urgencyColor(score), groupThreads(threads, field)\n"
         + tooltip_rule + "\n"
-        "- Return the COMPLETE modified function, not a snippet.\n\n"
+        "- Return the COMPLETE modified function for each changed component, not snippets.\n\n"
         "Return ONLY valid JSON — no markdown fences, no text outside JSON:\n"
         + return_instruction
     )
@@ -700,11 +704,16 @@ async def chat(body: ChatRequest):
             raise HTTPException(status_code=500, detail=f"JSON parse error: {e}\nRaw: {raw}")
 
         if parsed.get("action") == "component":
-            func_name = parsed.get("name", "")
-            new_func = parsed.get("code", "")
-            if func_name and new_func and func_name in components:
-                stitched = _ensure_data_sc(_replace_subcomponent(body.current_code, func_name, new_func))
-                return {"action": "component", "message": parsed["message"], "schema": None, "code": stitched}
+            changes = parsed.get("changes", [])
+            # Support legacy single-component format too
+            if not changes and parsed.get("name") and parsed.get("code"):
+                changes = [{"name": parsed["name"], "code": parsed["code"]}]
+            valid = [(c["name"], c["code"]) for c in changes if c.get("name") in components and c.get("code")]
+            if valid:
+                result_code = body.current_code
+                for func_name, new_func in valid:
+                    result_code = _replace_subcomponent(result_code, func_name, new_func)
+                return {"action": "component", "message": parsed["message"], "schema": None, "code": _ensure_data_sc(result_code)}
             return {
                 "action": "question",
                 "message": "I couldn't match the change to the right sub-component. Click Inspect, select the exact element, and try again.",
