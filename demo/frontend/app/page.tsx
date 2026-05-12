@@ -39,6 +39,10 @@ export default function Home() {
         .then((artifact) => {
           if (!artifact) return
           const targetPersona = PERSONAS.find((p) => p.id === artifact.personaId)?.id ?? persona
+          // Clear this persona's persisted state so the new tab starts
+          // as a clean snapshot, isolated from the sender's ongoing session
+          localStorage.removeItem(`na:history:${targetPersona}`)
+          localStorage.removeItem(`na:chat:${targetPersona}`)
           // Stash component code for MalleableRuntime to pick up on mount
           if (artifact.componentCode) {
             sessionStorage.setItem("na:share", JSON.stringify({
