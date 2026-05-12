@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from malleable import semantic, generate_manifest
-from models import Thread, SnoozeRequest, TagRequest, UISchema, GenerateSchemaRequest, GenerateComponentRequest, ChatRequest
+from models import Thread, SnoozeRequest, TagRequest, UISchema, GenerateSchemaRequest, GenerateComponentRequest, ChatRequest, ShareArtifact
 from data import THREADS, THREADS_BY_ID
 
 load_dotenv()
@@ -621,6 +621,27 @@ def _schema_to_base_component(schema) -> str | None:
     if schema.layout == "list":
         return _list_base_component(fields)
     return None
+
+
+# ---------------------------------------------------------------------------
+# Share store (in-memory; survives server restarts via simple dict)
+# ---------------------------------------------------------------------------
+
+import secrets
+_share_store: dict[str, dict] = {}
+
+@app.post("/share")
+def create_share(artifact: ShareArtifact):
+    share_id = secrets.token_urlsafe(8)
+    _share_store[share_id] = artifact.model_dump()
+    return {"id": share_id}
+
+@app.get("/share/{share_id}")
+def get_share(share_id: str):
+    artifact = _share_store.get(share_id)
+    if not artifact:
+        raise HTTPException(status_code=404, detail="Share not found")
+    return artifact
 
 
 def _is_bug_report(message: str) -> bool:

@@ -28,11 +28,21 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
   const { versions, currentIndex, push: pushVersion, restore: restoreVersion, clear: clearVersions } = useVersionHistory(`na:history:${personaId}`)
   const savedVersion = versions[currentIndex] ?? null
 
+  // One-time read of a shared artifact dropped by page.tsx (?share= param)
+  const sharedArtifact = useRef((() => {
+    if (typeof window === "undefined") return null
+    try {
+      const raw = sessionStorage.getItem("na:share")
+      if (raw) { sessionStorage.removeItem("na:share"); return JSON.parse(raw) }
+    } catch {}
+    return null
+  })())
+
   const [renderMode, setRenderMode] = useState<"schema" | "component">(
-    () => savedVersion?.renderMode ?? "schema"
+    () => sharedArtifact.current?.renderMode ?? savedVersion?.renderMode ?? "schema"
   )
   const [componentCode, setComponentCode] = useState<string | null>(
-    () => savedVersion?.componentCode ?? null
+    () => sharedArtifact.current?.componentCode ?? savedVersion?.componentCode ?? null
   )
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>(() => {
     if (typeof window === "undefined") return []
@@ -46,6 +56,7 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
   const [inspectMode, setInspectMode] = useState(false)
   const [inspectContext, setInspectContext] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  const [shareState, setShareState] = useState<"idle" | "loading" | "copied">("idle")
   const contentRef = useRef<HTMLDivElement>(null)
   const isFirstRender = useRef(true)
 
@@ -165,6 +176,25 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
     setInspectContext(context)
   }
 
+  async function handleShare() {
+    setShareState("loading")
+    try {
+      const label = versions[currentIndex]?.label ?? "Custom view"
+      const res = await fetch(`${API}/share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schema, componentCode, renderMode, label, personaId }),
+      })
+      const { id } = await res.json()
+      const url = `${window.location.origin}${window.location.pathname}?share=${id}`
+      await navigator.clipboard.writeText(url)
+      setShareState("copied")
+      setTimeout(() => setShareState("idle"), 2000)
+    } catch {
+      setShareState("idle")
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Top bar */}
@@ -243,6 +273,30 @@ export default function MalleableRuntime({ schema, onSchemaChange, personaId }: 
             <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
           </svg>
           {versions.length > 0 && <span>{versions.length}</span>}
+        </button>
+
+        {/* Share button */}
+        <button
+          onClick={handleShare}
+          disabled={shareState === "loading"}
+          title="Copy shareable link"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors text-zinc-500 border-zinc-200 hover:bg-zinc-100 disabled:opacity-50"
+        >
+          {shareState === "copied" ? (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Copied!
+            </>
+          ) : (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>
+              </svg>
+              Share
+            </>
+          )}
         </button>
       </div>
 

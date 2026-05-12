@@ -60,3 +60,11 @@ class ChatRequest(BaseModel):
     messages: list[ConversationMessage]
     current_schema: UISchema
     current_code: Optional[str] = None
+
+
+class ShareArtifact(BaseModel):
+    schema: UISchema
+    componentCode: Optional[str] = None
+    renderMode: str = "schema"
+    label: str = ""
+    personaId: str = ""

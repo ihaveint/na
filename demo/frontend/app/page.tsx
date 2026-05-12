@@ -30,8 +30,34 @@ export default function Home() {
     const persona = PERSONAS.find((p) => p.id === lastPersona) ? lastPersona : PERSONAS[0].id
     const activeSchema = saved[persona] ?? PERSONAS.find((p) => p.id === persona)!.schema
     setSchemas(saved)
-    setActivePersona(persona)
-    setSchema(activeSchema)
+
+    // Load a shared artifact if ?share= is in the URL
+    const shareId = new URLSearchParams(window.location.search).get("share")
+    if (shareId) {
+      fetch(`http://localhost:8000/share/${shareId}`)
+        .then((r) => r.ok ? r.json() : null)
+        .then((artifact) => {
+          if (!artifact) return
+          const targetPersona = PERSONAS.find((p) => p.id === artifact.personaId)?.id ?? persona
+          // Stash component code for MalleableRuntime to pick up on mount
+          if (artifact.componentCode) {
+            sessionStorage.setItem("na:share", JSON.stringify({
+              componentCode: artifact.componentCode,
+              renderMode: artifact.renderMode,
+            }))
+          }
+          setActivePersona(targetPersona)
+          setSchema(artifact.schema)
+          window.history.replaceState({}, "", window.location.pathname)
+        })
+        .catch(() => {
+          setActivePersona(persona)
+          setSchema(activeSchema)
+        })
+    } else {
+      setActivePersona(persona)
+      setSchema(activeSchema)
+    }
   }, [])
 
   function updateSchema(persona: string, s: UISchema) {
