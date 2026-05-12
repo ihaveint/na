@@ -27,10 +27,7 @@ export default function HistoryDrawer({ versions, currentIndex, open, onClose, o
     <>
       <div className="fixed inset-0 z-[9998] bg-black/20" onClick={onClose} />
 
-      <div
-        className="fixed right-0 top-0 h-full bg-white border-l border-zinc-200 shadow-2xl flex flex-col z-[9999]"
-        style={{ width: 300 }}
-      >
+      <div className="fixed inset-0 md:inset-auto md:right-0 md:top-0 md:h-full md:w-[300px] bg-white border-l border-zinc-200 shadow-2xl flex flex-col z-[9999]">
         <div className="px-4 py-3 border-b border-zinc-100 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-zinc-500">

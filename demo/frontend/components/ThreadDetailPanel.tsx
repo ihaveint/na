@@ -22,10 +22,7 @@ export default function ThreadDetailPanel({ thread, onClose }: Props) {
     <>
       <div className="fixed inset-0 z-[9998] bg-black/20" onClick={onClose} />
 
-      <div
-        className="fixed right-0 top-0 h-full bg-white border-l border-zinc-200 shadow-2xl flex flex-col z-[9999]"
-        style={{ width: 480 }}
-      >
+      <div className="fixed inset-0 md:inset-auto md:right-0 md:top-0 md:h-full md:w-[480px] bg-white border-l border-zinc-200 shadow-2xl flex flex-col z-[9999]">
         {/* Header */}
         <div className="px-5 py-4 border-b border-zinc-100 flex-shrink-0">
           <div className="flex items-start justify-between gap-3">
