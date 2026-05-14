@@ -126,7 +126,16 @@ export default function Home() {
         ))}
       </div>
 
-      <div className="mt-auto" />
+      <div className="mt-auto px-4 py-4 border-t border-zinc-100">
+        <a
+          href="https://na-landing.netlify.app"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-zinc-400 hover:text-zinc-600 transition-colors"
+        >
+          About this project ↗
+        </a>
+      </div>
     </>
   )
 
