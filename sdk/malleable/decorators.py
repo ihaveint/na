@@ -11,6 +11,7 @@ def semantic(
     intent: str | None = None,
     operation: str | None = None,
     description: str | None = None,
+    path: str | None = None,
 ):
     """Mark a FastAPI endpoint as a semantic primitive.
 
@@ -32,6 +33,7 @@ def semantic(
             "description": description or fn.__doc__ or "",
             "return_type": _hint_to_str(return_hint),
             "params": _extract_params(fn),
+            "path": path,
         })
 
         @functools.wraps(fn)

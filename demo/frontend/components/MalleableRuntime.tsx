@@ -1,8 +1,8 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
-import type { Thread, UISchema, Version, ChatMessage } from "@/lib/types"
-import ThreadDetailPanel from "./ThreadDetailPanel"
-import { applySchema } from "@/lib/utils"
+import type { Item, UISchema, Version, ChatMessage } from "@/lib/types"
+import ItemDetailPanel from "./ItemDetailPanel"
+import { applySchema, groupItems } from "@/lib/utils"
 import { useVersionHistory } from "@/lib/useVersionHistory"
 import ListView from "./layouts/ListView"
 import KanbanView from "./layouts/KanbanView"
@@ -22,7 +22,8 @@ interface Props {
 }
 
 export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange, personaId }: Props) {
-  const [threads, setThreads] = useState<Thread[]>([])
+  const [items, setItems] = useState<Item[]>([])
+  const [manifest, setManifest] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
   const [applying, setApplying] = useState(false)
   const [justApplied, setJustApplied] = useState(false)
@@ -65,7 +66,7 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
   const [inspectMode, setInspectMode] = useState(false)
   const [inspectContext, setInspectContext] = useState<string | null>(null)
   const [showHistory, setShowHistory] = useState(false)
-  const [selectedThread, setSelectedThread] = useState<Thread | null>(null)
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null)
   const [shareState, setShareState] = useState<"idle" | "loading" | "copied" | "error">("idle")
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [shareCopied, setShareCopied] = useState(false)
@@ -83,15 +84,27 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
   }, [schema, componentCode])
 
   useEffect(() => {
-    const endpoint = schema.data_source === "list_actionable" ? "/threads/actionable" : "/threads"
-    setLoading(true)
-    fetch(`${API}${endpoint}`)
+    fetch(`${API}/manifest`)
       .then((r) => r.json())
-      .then((data) => { setThreads(data); setLoading(false) })
-      .catch(() => setLoading(false))
-  }, [schema.data_source])
+      .then((m) => setManifest(m))
+      .catch(() => {}) // non-fatal; falls back to hardcoded path below
+  }, [])
 
-  const displayed = applySchema(threads, schema)
+  useEffect(() => {
+    // Resolve the fetch URL from the manifest if available, else fall back to a
+    // convention-based path derived from the intent string.
+    const endpoints = (manifest?.endpoints as Array<Record<string, string>> | undefined) ?? []
+    const ep = endpoints.find((e) => e.intent === schema.data_source)
+    const path = ep?.path ?? (schema.data_source === "list_actionable" ? "/threads/actionable" : "/threads")
+
+    setLoading(true)
+    fetch(`${API}${path}`)
+      .then((r) => r.json())
+      .then((data) => { setItems(data); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [schema.data_source, manifest])
+
+  const displayed = applySchema(items, schema)
 
   function blurIn() {
     setTimeout(() => {
@@ -364,13 +377,13 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
         {loading ? (
           <div className="flex items-center justify-center h-full text-zinc-400 text-sm">Loading…</div>
         ) : renderMode === "component" && componentCode ? (
-          <DynamicView code={componentCode} items={displayed} onItemClick={setSelectedThread} />
+          <DynamicView code={componentCode} items={displayed} onItemClick={setSelectedItem} />
         ) : schema.layout === "kanban" ? (
-          <KanbanView threads={displayed} schema={schema} onThreadClick={setSelectedThread} />
+          <KanbanView items={displayed} schema={schema} onItemClick={setSelectedItem} />
         ) : schema.layout === "table" ? (
-          <TableView threads={displayed} schema={schema} onThreadClick={setSelectedThread} />
+          <TableView items={displayed} schema={schema} onItemClick={setSelectedItem} />
         ) : (
-          <ListView threads={displayed} schema={schema} onThreadClick={setSelectedThread} />
+          <ListView items={displayed} schema={schema} onItemClick={setSelectedItem} />
         )}
 
         <InspectOverlay active={inspectMode} onElementClick={handleElementClick} />
@@ -384,9 +397,9 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
         onRestore={handleRestore}
       />
 
-      <ThreadDetailPanel
-        thread={selectedThread}
-        onClose={() => setSelectedThread(null)}
+      <ItemDetailPanel
+        item={selectedItem}
+        onClose={() => setSelectedItem(null)}
       />
 
       {/* Floating chat */}

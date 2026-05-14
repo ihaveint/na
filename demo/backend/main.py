@@ -37,13 +37,13 @@ def get_anthropic() -> anthropic.Anthropic:
 # Semantic endpoints — decorated so the SDK can introspect them
 # ---------------------------------------------------------------------------
 
-@semantic(entity="Thread", intent="list_all", description="All threads, newest first")
+@semantic(entity="Thread", intent="list_all", description="All threads, newest first", path="/threads")
 @app.get("/threads", response_model=list[Thread])
 async def list_threads():
     return sorted(THREADS, key=lambda t: t.date, reverse=True)
 
 
-@semantic(entity="Thread", intent="list_actionable", description="Unread or pending threads that need attention")
+@semantic(entity="Thread", intent="list_actionable", description="Unread or pending threads that need attention", path="/threads/actionable")
 @app.get("/threads/actionable", response_model=list[Thread])
 async def list_actionable_threads():
     return sorted(
@@ -538,44 +538,44 @@ def _make_subcomponent_modify_prompt(components: dict[str, str], target: str | N
     )
 
 
-_FIELD_LABELS: dict[str, str] = {
-    "subject": "Subject",
-    "sender": "Sender",
-    "sender_name": "From",
-    "preview": "Preview",
-    "project": "Project",
-    "urgency_score": "Priority",
-    "date": "Date",
-    "is_read": "Status",
-    "is_snoozed": "Snoozed",
-    "due_date": "Due",
-    "tags": "Tags",
-}
+def _field_label(field: str) -> str:
+    """Prettify an arbitrary snake_case field name into a display label."""
+    overrides: dict[str, str] = {
+        "id": "ID",
+        "subject": "Subject",
+        "sender": "Sender",
+        "sender_name": "From",
+        "preview": "Preview",
+        "project": "Project",
+        "urgency_score": "Priority",
+        "date": "Date",
+        "is_read": "Status",
+        "is_snoozed": "Snoozed",
+        "due_date": "Due",
+        "tags": "Tags",
+    }
+    if field in overrides:
+        return overrides[field]
+    return field.replace("_", " ").title()
 
 
 def _cell_jsx(field: str) -> str:
-    """JSX for a table cell — matches CellValue in TableView.tsx exactly."""
-    if field == "urgency_score":
-        return '<span className={`px-1.5 py-0.5 rounded border text-xs bg-zinc-100 text-zinc-700`}>{item.urgency_score}</span>'
-    if field == "date":
-        return '<span className="text-zinc-500">{formatDate(item.date)}</span>'
-    if field == "due_date":
-        return '<span className="text-zinc-500">{formatDate(item.due_date)}</span>'
+    """JSX for a table cell."""
+    if field in ("date", "due_date", "created_at", "updated_at") or "date" in field or field.endswith("_at"):
+        return f'<span className="text-zinc-500">{{formatDate(item.{field})}}</span>'
     if field == "is_read":
         return '<span className={item.is_read ? "text-zinc-400" : "text-blue-600 font-medium"}>{item.is_read ? "Read" : "Unread"}</span>'
-    if field == "project":
-        return '{item.project ? <span className="bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded text-xs">{item.project}</span> : <span className="text-zinc-400">—</span>}'
-    if field == "tags":
-        return '<div className="flex gap-1 flex-wrap">{(item.tags || []).map(tag => <span key={tag} className="bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded text-xs">{tag}</span>)}</div>'
-    if field == "subject":
-        return '<span className={`truncate block max-w-xs ${!item.is_read ? "font-semibold text-zinc-900" : "text-zinc-600"}`}>{item.subject || "—"}</span>'
-    return f'<span className="text-zinc-700 truncate block max-w-xs">{{String(item.{field} ?? "—")}}</span>'
+    return (
+        f'{{Array.isArray(item.{field})'
+        f' ? <div className="flex gap-1 flex-wrap">{{(item.{field}).map(v => <span key={{v}} className="bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded text-xs">{{v}}</span>)}}</div>'
+        f' : <span className="text-zinc-700 truncate block max-w-xs">{{String(item.{field} ?? "—")}}</span>}}'
+    )
 
 
 def _table_base_component(fields: list[str]) -> str:
     label_ths = "\n        ".join(
         f'<th className="text-left px-4 py-2 text-xs font-semibold text-zinc-500 uppercase tracking-wide">'
-        f'{_FIELD_LABELS.get(f, f)}</th>'
+        f'{_field_label(f)}</th>'
         for f in fields
     )
     cell_tds = "\n      ".join(
@@ -593,21 +593,23 @@ def _table_base_component(fields: list[str]) -> str:
         '  )\n'
         '}\n'
         '\n'
-        'function TableRow({ item }) {\n'
+        'function TableRow({ item, onItemClick }) {\n'
         '  return (\n'
-        '    <tr data-sc="TableRow" className="hover:bg-zinc-50 transition-colors">\n'
+        '    <tr data-sc="TableRow"\n'
+        '      onClick={() => onItemClick && onItemClick(item)}\n'
+        '      className="hover:bg-zinc-50 transition-colors cursor-pointer">\n'
         f'      {cell_tds}\n'
         '    </tr>\n'
         '  )\n'
         '}\n'
         '\n'
-        'function Layout({ items }) {\n'
+        'function Layout({ items, onItemClick }) {\n'
         '  return (\n'
         '    <div data-sc="Layout" className="overflow-x-auto">\n'
         '      <table className="w-full text-sm">\n'
         '        <TableHeader />\n'
         '        <tbody className="divide-y divide-zinc-100">\n'
-        '          {items.map(t => <TableRow key={t.id} item={t} />)}\n'
+        '          {items.map(t => <TableRow key={t.id ?? t.subject ?? t.name} item={t} onItemClick={onItemClick} />)}\n'
         '        </tbody>\n'
         '      </table>\n'
         '    </div>\n'
@@ -617,52 +619,58 @@ def _table_base_component(fields: list[str]) -> str:
 
 
 def _list_base_component(fields: list[str]) -> str:
+    # Build generic meta pills for every field that isn't the primary title or id
+    title_fields = {"subject", "title", "name", "id"}
+    meta_fields = [f for f in fields if f not in title_fields]
+
     meta_parts: list[str] = []
-    if "sender_name" in fields:
-        meta_parts.append('          <span className="text-xs text-zinc-500">{item.sender_name}</span>')
-    if "project" in fields:
-        meta_parts.append('          {item.project && <span className="text-xs bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded">{item.project}</span>}')
-    if "due_date" in fields:
-        meta_parts.append('          {item.due_date && <span className="text-xs text-orange-600">Due {formatDate(item.due_date)}</span>}')
-    if "urgency_score" in fields:
-        meta_parts.append('          <span className="text-xs px-1.5 py-0.5 rounded border bg-zinc-100 text-zinc-700">{item.urgency_score}</span>')
-    if "tags" in fields:
-        meta_parts.append(
-            '          {item.tags && item.tags.length > 0 && '
-            '<div className="flex gap-1">'
-            '{item.tags.slice(0, 2).map(tag => '
-            '<span key={tag} className="text-xs bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded">{tag}</span>'
-            ')}</div>}'
-        )
+    for field in meta_fields:
+        if field in ("date", "due_date", "created_at", "updated_at") or "date" in field or field.endswith("_at"):
+            meta_parts.append(
+                f'          {{item.{field} && <span className="text-xs text-zinc-400">{{formatDate(item.{field})}}</span>}}'
+            )
+        else:
+            meta_parts.append(
+                f'          {{item.{field} != null && item.{field} !== false && ('
+                f'Array.isArray(item.{field})'
+                f' ? (item.{field}).slice(0,3).map(v => <span key={{v}} className="text-xs bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded">{{v}}</span>)'
+                f' : <span className="text-xs bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded">{{String(item.{field})}}</span>'
+                f')}}'
+            )
+
     meta_row = "\n".join(meta_parts)
-    preview = (
-        '\n        <p className="text-xs text-zinc-400 truncate mt-0.5">{item.preview}</p>'
-        if "preview" in fields else ""
-    )
+
     return (
-        'function ItemCard({ item }) {\n'
+        'function ItemCard({ item, onItemClick }) {\n'
+        '  const title = item.subject ?? item.title ?? item.name ?? "(untitled)"\n'
+        '  const isUnread = item.is_read === false\n'
+        '  const dateVal = item.date ?? null\n'
         '  return (\n'
-        '    <div data-sc="ItemCard" className="flex gap-4 px-4 py-3 hover:bg-zinc-50 transition-colors">\n'
+        '    <div data-sc="ItemCard"\n'
+        '      onClick={() => onItemClick && onItemClick(item)}\n'
+        '      className={`flex gap-4 px-4 py-3 hover:bg-zinc-50 transition-colors cursor-pointer ${isUnread ? "bg-blue-50/40" : ""}`}>\n'
+        '      <div className="mt-1 flex-shrink-0">\n'
+        '        <div className={`w-2 h-2 rounded-full mt-1.5 ${isUnread ? "bg-blue-500" : "bg-transparent"}`} />\n'
+        '      </div>\n'
         '      <div className="flex-1 min-w-0">\n'
         '        <div className="flex items-baseline justify-between gap-2">\n'
-        '          <span className="text-sm truncate text-zinc-800 font-medium">\n'
-        '            {item.subject ?? item.title ?? item.name ?? "(no title)"}\n'
+        '          <span className={`text-sm truncate ${isUnread ? "font-semibold text-zinc-900" : "text-zinc-700"}`}>\n'
+        '            {String(title)}\n'
         '          </span>\n'
-        '          {item.date && <span className="text-xs text-zinc-400 flex-shrink-0">{formatDate(item.date)}</span>}\n'
+        '          {dateVal && <span className="text-xs text-zinc-400 flex-shrink-0">{formatDate(dateVal)}</span>}\n'
         '        </div>\n'
-        '        <div className="flex items-center gap-2 mt-0.5">\n'
+        '        <div className="flex items-center gap-2 mt-0.5 flex-wrap">\n'
         f'{meta_row}\n'
-        '        </div>'
-        f'{preview}\n'
+        '        </div>\n'
         '      </div>\n'
         '    </div>\n'
         '  )\n'
         '}\n'
         '\n'
-        'function Layout({ items }) {\n'
+        'function Layout({ items, onItemClick }) {\n'
         '  return (\n'
         '    <div data-sc="Layout" className="flex flex-col divide-y divide-zinc-100">\n'
-        '      {items.map(t => <ItemCard key={t.id} item={t} />)}\n'
+        '      {items.map(t => <ItemCard key={t.id ?? t.subject ?? t.name} item={t} onItemClick={onItemClick} />)}\n'
         '    </div>\n'
         '  )\n'
         '}'

@@ -1,18 +1,18 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
-import type { Thread, UISchema } from "./types"
+import type { Item, Thread, UISchema } from "./types"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function applySchema(threads: Thread[], schema: UISchema): Thread[] {
-  let result = [...threads]
+export function applySchema(items: Item[], schema: UISchema): Item[] {
+  let result = [...items]
 
   // filters
   for (const f of schema.filters) {
-    result = result.filter((t) => {
-      const val = (t as unknown as Record<string, unknown>)[f.field]
+    result = result.filter((item) => {
+      const val = (item as unknown as Record<string, unknown>)[f.field]
       // coerce both sides so boolean fields work when Claude emits "true"/"false" strings
       const coerce = (v: unknown) => {
         if (v === "true") return true
@@ -55,19 +55,20 @@ export function applySchema(threads: Thread[], schema: UISchema): Thread[] {
   return result
 }
 
-// Virtual fields Claude may generate that don't exist on Thread directly
+// Virtual fields Claude may generate that don't exist on items directly
 const URGENCY_BUCKET_ORDER = ["Critical", "Normal", "Low"]
 
-function computeVirtualField(t: Thread, field: string): string {
+function computeVirtualField(t: Item, field: string): string {
   if (field === "urgency_bucket") {
-    if (t.urgency_score >= 75) return "Critical"
-    if (t.urgency_score >= 40) return "Normal"
+    const score = Number(t["urgency_score"] ?? 0)
+    if (score >= 75) return "Critical"
+    if (score >= 40) return "Normal"
     return "Low"
   }
   if (field === "has_deadline") {
-    return t.due_date ? "Has deadline" : "No deadline"
+    return t["due_date"] ? "Has deadline" : "No deadline"
   }
-  return String((t as unknown as Record<string, unknown>)[field] ?? "Other")
+  return String((t as Record<string, unknown>)[field] ?? "Other")
 }
 
 const COLUMN_ORDER: Record<string, string[]> = {
@@ -76,12 +77,12 @@ const COLUMN_ORDER: Record<string, string[]> = {
 }
 
 export function groupThreads(
-  threads: Thread[],
+  threads: Item[],
   groupBy: string | null
-): Record<string, Thread[]> {
+): Record<string, Item[]> {
   if (!groupBy) return { "": threads }
 
-  const groups: Record<string, Thread[]> = {}
+  const groups: Record<string, Item[]> = {}
   for (const t of threads) {
     const key = computeVirtualField(t, groupBy)
     if (!groups[key]) groups[key] = []
@@ -91,7 +92,7 @@ export function groupThreads(
   // Return columns in a meaningful order if we know it
   const order = COLUMN_ORDER[groupBy]
   if (order) {
-    const ordered: Record<string, Thread[]> = {}
+    const ordered: Record<string, Item[]> = {}
     for (const col of order) if (groups[col]) ordered[col] = groups[col]
     // append any unexpected keys at the end
     for (const key of Object.keys(groups)) if (!ordered[key]) ordered[key] = groups[key]
@@ -102,15 +103,32 @@ export function groupThreads(
 }
 
 export function groupItems(
-  items: Record<string, unknown>[],
+  items: Item[],
   groupBy: string | null
-): Record<string, Record<string, unknown>[]> {
+): Record<string, Item[]> {
   if (!groupBy) return { "": items }
-  const groups: Record<string, Record<string, unknown>[]> = {}
+
+  const groups: Record<string, Item[]> = {}
   for (const item of items) {
-    const key = String(item[groupBy] ?? "Other")
+    let key: string
+    if (groupBy === "urgency_bucket") {
+      const score = Number(item["urgency_score"] ?? 0)
+      key = score >= 75 ? "Critical" : score >= 40 ? "Normal" : "Low"
+    } else if (groupBy === "has_deadline") {
+      key = item["due_date"] ? "Has deadline" : "No deadline"
+    } else {
+      key = String(item[groupBy] ?? "Other")
+    }
     if (!groups[key]) groups[key] = []
     groups[key].push(item)
+  }
+
+  const order = COLUMN_ORDER[groupBy]
+  if (order) {
+    const ordered: Record<string, Item[]> = {}
+    for (const col of order) if (groups[col]) ordered[col] = groups[col]
+    for (const key of Object.keys(groups)) if (!ordered[key]) ordered[key] = groups[key]
+    return ordered
   }
   return groups
 }

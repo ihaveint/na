@@ -1,18 +1,18 @@
 "use client"
-import type { Thread, UISchema } from "@/lib/types"
-import { cn, urgencyColor, fieldLabel, formatDate } from "@/lib/utils"
+import type { Item, UISchema } from "@/lib/types"
+import { cn, fieldLabel, formatDate } from "@/lib/utils"
 
 interface Props {
-  threads: Thread[]
+  items: Item[]
   schema: UISchema
-  onThreadClick?: (thread: Thread) => void
+  onItemClick?: (item: Item) => void
 }
 
-export default function TableView({ threads, schema, onThreadClick }: Props) {
+export default function TableView({ items, schema, onItemClick }: Props) {
   const cols = schema.card_fields
-  // On mobile, always show subject + sender_name as primary, then remaining fields as metadata
-  const primaryCols = ["subject", "sender_name"].filter((c) => cols.includes(c))
-  const metaCols = cols.filter((c) => !["subject", "sender_name"].includes(c))
+  const titleFields = new Set(["subject", "title", "name"])
+  const primaryCols = cols.filter((c) => titleFields.has(c))
+  const metaCols = cols.filter((c) => !titleFields.has(c))
 
   return (
     <>
@@ -29,15 +29,15 @@ export default function TableView({ threads, schema, onThreadClick }: Props) {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
-            {threads.map((t) => (
+            {items.map((item) => (
               <tr
-                key={t.id}
-                onClick={() => onThreadClick?.(t)}
-                className={cn("hover:bg-zinc-50 transition-colors", onThreadClick && "cursor-pointer", !t.is_read && "bg-blue-50/30")}
+                key={String(item.id ?? item.subject ?? item.name)}
+                onClick={() => onItemClick?.(item)}
+                className={cn("hover:bg-zinc-50 transition-colors", onItemClick && "cursor-pointer")}
               >
                 {cols.map((col) => (
                   <td key={col} className="px-4 py-2 max-w-xs">
-                    <CellValue thread={t} field={col} />
+                    <CellValue item={item} field={col} />
                   </td>
                 ))}
               </tr>
@@ -48,31 +48,25 @@ export default function TableView({ threads, schema, onThreadClick }: Props) {
 
       {/* Mobile: card list */}
       <div className="md:hidden divide-y divide-zinc-100">
-        {threads.map((t) => (
+        {items.map((item) => (
           <div
-            key={t.id}
-            onClick={() => onThreadClick?.(t)}
+            key={String(item.id ?? item.subject ?? item.name)}
+            onClick={() => onItemClick?.(item)}
             className={cn(
               "px-4 py-3 flex flex-col gap-1.5",
-              onThreadClick && "cursor-pointer",
-              !t.is_read && "bg-blue-50/30",
+              onItemClick && "cursor-pointer",
               "hover:bg-zinc-50 transition-colors"
             )}
           >
-            {/* Subject row */}
-            {primaryCols.includes("subject") && (
-              <p className={cn("text-sm leading-snug truncate", !t.is_read ? "font-semibold text-zinc-900" : "text-zinc-700")}>
-                {t.subject}
+            {primaryCols.map((col) => (
+              <p key={col} className="text-sm leading-snug truncate text-zinc-800 font-medium">
+                {String(item[col] ?? "—")}
               </p>
-            )}
-            {/* Sender + meta row */}
+            ))}
             <div className="flex items-center gap-2 flex-wrap">
-              {primaryCols.includes("sender_name") && (
-                <span className="text-xs text-zinc-500">{t.sender_name}</span>
-              )}
               {metaCols.map((col) => (
                 <span key={col} className="text-xs text-zinc-400">
-                  <CellValue thread={t} field={col} />
+                  <CellValue item={item} field={col} />
                 </span>
               ))}
             </div>
@@ -83,37 +77,27 @@ export default function TableView({ threads, schema, onThreadClick }: Props) {
   )
 }
 
-function CellValue({ thread, field }: { thread: Thread; field: string }) {
-  const val = (thread as unknown as Record<string, unknown>)[field]
+function CellValue({ item, field }: { item: Item; field: string }) {
+  const val = item[field]
 
-  if (field === "urgency_score") {
-    return (
-      <span className={cn("px-1.5 py-0.5 rounded border text-xs", urgencyColor(Number(val)))}>
-        {String(val)}
-      </span>
-    )
-  }
-  if (field === "date" || field === "due_date") {
-    return <span className="text-zinc-500">{formatDate(val as string | null)}</span>
-  }
-  if (field === "is_read") {
-    return <span className={val ? "text-zinc-400" : "text-blue-600 font-medium"}>{val ? "Read" : "Unread"}</span>
-  }
-  if (field === "project" && val) {
-    return <span className="bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded text-xs">{String(val)}</span>
-  }
-  if (field === "tags" && Array.isArray(val)) {
+  if (Array.isArray(val)) {
     return (
       <div className="flex gap-1 flex-wrap">
-        {(val as string[]).map((tag) => (
-          <span key={tag} className="bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded text-xs">{tag}</span>
+        {(val as string[]).map((v) => (
+          <span key={v} className="bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded text-xs">{v}</span>
         ))}
       </div>
     )
   }
-  if (field === "subject") {
+  if (typeof val === "boolean") {
+    return <span className={val ? "text-zinc-400" : "text-blue-600 font-medium"}>{val ? "Yes" : "No"}</span>
+  }
+  if (field.includes("date") || field.endsWith("_at")) {
+    return <span className="text-zinc-500">{formatDate(val as string | null)}</span>
+  }
+  if (field === "subject" || field === "title" || field === "name") {
     return (
-      <span className={cn("truncate block max-w-xs", !thread.is_read ? "font-semibold text-zinc-900" : "text-zinc-600")}>
+      <span className={cn("truncate block max-w-xs", item.is_read === false ? "font-semibold text-zinc-900" : "text-zinc-600")}>
         {String(val ?? "—")}
       </span>
     )

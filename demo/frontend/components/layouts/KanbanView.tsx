@@ -1,11 +1,11 @@
 "use client"
-import type { Thread, UISchema } from "@/lib/types"
-import { cn, groupThreads, urgencyColor, formatDate } from "@/lib/utils"
+import type { Item, UISchema } from "@/lib/types"
+import { cn, groupItems, formatDate } from "@/lib/utils"
 
 interface Props {
-  threads: Thread[]
+  items: Item[]
   schema: UISchema
-  onThreadClick?: (thread: Thread) => void
+  onItemClick?: (item: Item) => void
 }
 
 const COLUMN_COLORS = [
@@ -21,58 +21,72 @@ function columnColor(index: number) {
   return COLUMN_COLORS[index % COLUMN_COLORS.length]
 }
 
-function KanbanCard({ t, schema, onThreadClick }: { t: Thread; schema: UISchema; onThreadClick?: (t: Thread) => void }) {
+function KanbanCard({
+  item,
+  schema,
+  onItemClick,
+}: {
+  item: Item
+  schema: UISchema
+  onItemClick?: (item: Item) => void
+}) {
+  const title = String(item.subject ?? item.title ?? item.name ?? "(untitled)")
+  const isUnread = item.is_read === false
+  const titleFields = new Set(["subject", "title", "name", "id"])
+  const metaFields = schema.card_fields.filter((f) => !titleFields.has(f))
+
   return (
     <div
-      onClick={() => onThreadClick?.(t)}
+      onClick={() => onItemClick?.(item)}
       className={cn(
         "bg-white border border-zinc-100 rounded-md p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer",
-        !t.is_read && "border-l-2 border-l-blue-400"
+        isUnread && "border-l-2 border-l-blue-400"
       )}
     >
-      <p className={cn("text-sm leading-snug", !t.is_read ? "font-semibold text-zinc-900" : "text-zinc-700")}>
-        {t.subject}
+      <p className={cn("text-sm leading-snug", isUnread ? "font-semibold text-zinc-900" : "text-zinc-700")}>
+        {title}
       </p>
       <div className="mt-2 flex flex-wrap gap-1">
-        {schema.card_fields.includes("sender_name") && (
-          <span className="text-xs text-zinc-400">{t.sender_name}</span>
-        )}
-      </div>
-      <div className="mt-2 flex items-center justify-between">
-        {schema.card_fields.includes("urgency_score") && (
-          <span className={cn("text-xs px-1.5 py-0.5 rounded border", urgencyColor(t.urgency_score))}>
-            {t.urgency_score}
-          </span>
-        )}
-        {schema.card_fields.includes("due_date") && t.due_date && (
-          <span className="text-xs text-orange-500">Due {formatDate(t.due_date)}</span>
-        )}
-        {schema.card_fields.includes("date") && !t.due_date && (
-          <span className="text-xs text-zinc-400">{formatDate(t.date)}</span>
-        )}
+        {metaFields.map((field) => {
+          const val = item[field]
+          if (val == null || val === false) return null
+          if (Array.isArray(val)) {
+            return (val as string[]).slice(0, 2).map((v) => (
+              <span key={v} className="text-xs bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded">{v}</span>
+            ))
+          }
+          if (field.includes("date") || field.endsWith("_at")) {
+            return <span key={field} className="text-xs text-zinc-400">{formatDate(String(val))}</span>
+          }
+          return (
+            <span key={field} className="text-xs bg-zinc-100 text-zinc-600 px-1.5 py-0.5 rounded">
+              {String(val)}
+            </span>
+          )
+        })}
       </div>
     </div>
   )
 }
 
-export default function KanbanView({ threads, schema, onThreadClick }: Props) {
-  const groups = groupThreads(threads, schema.group_by)
+export default function KanbanView({ items, schema, onItemClick }: Props) {
+  const groups = groupItems(items, schema.group_by)
   const columns = Object.entries(groups)
 
   return (
     <>
       {/* Desktop: horizontal columns */}
       <div className="hidden md:flex gap-4 p-4 overflow-x-auto h-full">
-        {columns.map(([group, items], colIdx) => (
+        {columns.map(([group, colItems], colIdx) => (
           <div key={group} className="flex-shrink-0 w-72">
             <div className={cn("bg-white rounded-lg border border-zinc-200 border-t-4 flex flex-col", columnColor(colIdx))}>
               <div className="px-3 py-2 border-b border-zinc-100 flex items-center justify-between">
-                <span className="text-sm font-semibold text-zinc-700">{group || "No project"}</span>
-                <span className="text-xs text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full">{items.length}</span>
+                <span className="text-sm font-semibold text-zinc-700">{group || "Ungrouped"}</span>
+                <span className="text-xs text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full">{colItems.length}</span>
               </div>
               <div className="flex flex-col gap-2 p-2 overflow-y-auto">
-                {items.map((t) => (
-                  <KanbanCard key={t.id} t={t} schema={schema} onThreadClick={onThreadClick} />
+                {colItems.map((item) => (
+                  <KanbanCard key={String(item.id ?? item.subject ?? item.name)} item={item} schema={schema} onItemClick={onItemClick} />
                 ))}
               </div>
             </div>
@@ -82,15 +96,15 @@ export default function KanbanView({ threads, schema, onThreadClick }: Props) {
 
       {/* Mobile: stacked vertical sections */}
       <div className="md:hidden flex flex-col gap-3 p-3 overflow-y-auto">
-        {columns.map(([group, items], colIdx) => (
+        {columns.map(([group, colItems], colIdx) => (
           <div key={group}>
             <div className={cn("flex items-center justify-between px-3 py-2 rounded-t-lg border border-b-0 border-zinc-200 bg-white border-t-4", columnColor(colIdx))}>
-              <span className="text-sm font-semibold text-zinc-700">{group || "No project"}</span>
-              <span className="text-xs text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full">{items.length}</span>
+              <span className="text-sm font-semibold text-zinc-700">{group || "Ungrouped"}</span>
+              <span className="text-xs text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded-full">{colItems.length}</span>
             </div>
             <div className="flex flex-col gap-2 p-2 bg-zinc-50 rounded-b-lg border border-t-0 border-zinc-200">
-              {items.map((t) => (
-                <KanbanCard key={t.id} t={t} schema={schema} onThreadClick={onThreadClick} />
+              {colItems.map((item) => (
+                <KanbanCard key={String(item.id ?? item.subject ?? item.name)} item={item} schema={schema} onItemClick={onItemClick} />
               ))}
             </div>
           </div>

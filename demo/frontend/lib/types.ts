@@ -1,3 +1,5 @@
+export type Item = Record<string, unknown>
+
 export interface Message {
   id: string
   sender: string
@@ -32,7 +34,7 @@ export interface Thread {
 
 export interface UISchema {
   layout: "list" | "kanban" | "calendar" | "table"
-  data_source: "list_all" | "list_actionable"
+  data_source: string
   group_by: string | null
   sort_by: string | null
   sort_direction: "asc" | "desc"

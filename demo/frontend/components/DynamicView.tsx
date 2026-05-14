@@ -1,12 +1,12 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
-import type { Thread } from "@/lib/types"
+import type { Item } from "@/lib/types"
 import { formatDate, groupItems } from "@/lib/utils"
 
 interface Props {
   code: string
-  items: Thread[]
-  onItemClick?: (item: Thread) => void
+  items: Item[]
+  onItemClick?: (item: Item) => void
 }
 
 export default function DynamicView({ code, items, onItemClick }: Props) {
