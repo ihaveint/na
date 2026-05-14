@@ -115,3 +115,33 @@ Pass your Pydantic model classes so the manifest includes field types and descri
 - **Backend:** FastAPI, Anthropic SDK (claude-sonnet-4-6), Pydantic
 - **Frontend:** Next.js, React 19, Tailwind CSS, TypeScript
 - **SDK:** Python 3.9+
+
+---
+
+## Status & known gaps
+
+### Recently completed
+- `@semantic(path=...)` — list endpoints carry their fetch URL through the manifest; frontend resolves `data_source → URL` at runtime with no hardcoded paths
+- Full domain-agnostic refactor — views, base component generators, and AI prompts all use `items: Entity[]` / `onItemClick`; no email concepts in the framework layer
+- `groupItems` replaces `groupThreads` in views; handles virtual group-by fields (`urgency_bucket`, `has_deadline`) generically
+- `ItemDetailPanel` — duck-types `item.messages` to show an email thread or fall back to a generic key-value grid for any other domain
+- `fieldLabel` prettifies any unknown snake_case field name to Title Case
+- Mobile: sidebar overlay, bottom-sheet chat, full-screen drawers, responsive kanban/table layouts
+- Hydration fix — `mounted` state gate prevents SSR/localStorage mismatch on version badge and item count
+
+### Known gaps / TODO
+
+**Frontend SDK doesn't exist yet**
+`MalleableRuntime.tsx`, the layout views, and `DynamicView` live inside `demo/frontend/components` instead of a publishable package. This is why `demo2` had to copy them wholesale and why fixes have to be ported manually between demos. The right fix is a `sdk/react/` package (or a monorepo with shared workspace) that demos import from. Deferring until a third demo makes the duplication untenable.
+
+**`demo2` hasn't received the domain-agnostic refactor**
+`demo2` still uses `Transaction[]`, `onTransactionClick`, and email-specific field rendering copied from the pre-refactor `demo`. It works, but it's carrying the old patterns. Should be updated to use `Item[]` / `onItemClick` and the generic views from `demo` — or ideally, both demos import from the frontend SDK once that exists.
+
+**`groupItems` carries email domain knowledge**
+`urgency_bucket` and `has_deadline` are hardcoded as virtual group-by fields in `utils.ts`. A music or finance backend can't usefully group by urgency bucket. The right fix is either a registration mechanism (backends declare virtual fields in the manifest) or moving the computation to the backend entirely.
+
+**Legacy endpoints are dead code**
+`/generate-schema` and `/generate-component` in `demo/backend/main.py` are no longer called by the frontend — everything goes through `/chat`. They can be deleted.
+
+**`ThreadDetailPanel.tsx` is orphaned**
+`demo/frontend/components/ThreadDetailPanel.tsx` is no longer imported anywhere (replaced by `ItemDetailPanel.tsx`). Safe to delete.
