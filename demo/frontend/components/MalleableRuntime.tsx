@@ -70,8 +70,14 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
   const [shareState, setShareState] = useState<"idle" | "loading" | "copied" | "error">("idle")
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [shareCopied, setShareCopied] = useState(false)
+  // Prevents SSR/client hydration mismatches on localStorage-derived UI (e.g. version badge).
+  // Server renders with versions=[] (no localStorage), client may have saved versions.
+  // Gate any such UI behind `mounted` so both sides agree on the initial render.
+  const [mounted, setMounted] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const isFirstRender = useRef(true)
+
+  useEffect(() => { setMounted(true) }, [])
 
   // Persist chat history for this persona (sessionStorage in share-mode tabs)
   useEffect(() => {
@@ -291,7 +297,7 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
           <span className={`text-xs font-medium text-violet-600 transition-opacity duration-300 ${justApplied ? "opacity-100" : "opacity-0"}`}>
             Applied
           </span>
-          <span className="text-xs text-zinc-400 hidden sm:inline">{displayed.length}</span>
+          {mounted && <span className="text-xs text-zinc-400 hidden sm:inline">{displayed.length}</span>}
 
           {/* Inspect toggle */}
           <button
@@ -322,7 +328,7 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
             </svg>
-            {versions.length > 0 && <span>{versions.length}</span>}
+            {mounted && versions.length > 0 && <span>{versions.length}</span>}
           </button>
 
           {/* Share button */}
