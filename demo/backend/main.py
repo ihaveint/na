@@ -609,7 +609,7 @@ def _table_base_component(fields: list[str]) -> str:
         '      <table className="w-full text-sm">\n'
         '        <TableHeader />\n'
         '        <tbody className="divide-y divide-zinc-100">\n'
-        '          {items.map(t => <TableRow key={t.id ?? t.subject ?? t.name} item={t} onItemClick={onItemClick} />)}\n'
+        '          {items.map(t => <TableRow key={t.id ?? t.name ?? t.title ?? t.subject} item={t} onItemClick={onItemClick} />)}\n'
         '        </tbody>\n'
         '      </table>\n'
         '    </div>\n'
@@ -642,7 +642,7 @@ def _list_base_component(fields: list[str]) -> str:
 
     return (
         'function ItemCard({ item, onItemClick }) {\n'
-        '  const title = item.subject ?? item.title ?? item.name ?? "(untitled)"\n'
+        '  const title = item.name ?? item.title ?? item.subject ?? "(untitled)"\n'
         '  const isUnread = item.is_read === false\n'
         '  const dateVal = item.date ?? null\n'
         '  return (\n'
@@ -670,7 +670,7 @@ def _list_base_component(fields: list[str]) -> str:
         'function Layout({ items, onItemClick }) {\n'
         '  return (\n'
         '    <div data-sc="Layout" className="flex flex-col divide-y divide-zinc-100">\n'
-        '      {items.map(t => <ItemCard key={t.id ?? t.subject ?? t.name} item={t} onItemClick={onItemClick} />)}\n'
+        '      {items.map(t => <ItemCard key={t.id ?? t.name ?? t.title ?? t.subject} item={t} onItemClick={onItemClick} />)}\n'
         '    </div>\n'
         '  )\n'
         '}'

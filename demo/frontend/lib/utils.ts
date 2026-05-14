@@ -1,6 +1,6 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
-import type { Item, Thread, UISchema } from "./types"
+import type { Item, UISchema } from "./types"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -76,31 +76,6 @@ const COLUMN_ORDER: Record<string, string[]> = {
   has_deadline: ["Has deadline", "No deadline"],
 }
 
-export function groupThreads(
-  threads: Item[],
-  groupBy: string | null
-): Record<string, Item[]> {
-  if (!groupBy) return { "": threads }
-
-  const groups: Record<string, Item[]> = {}
-  for (const t of threads) {
-    const key = computeVirtualField(t, groupBy)
-    if (!groups[key]) groups[key] = []
-    groups[key].push(t)
-  }
-
-  // Return columns in a meaningful order if we know it
-  const order = COLUMN_ORDER[groupBy]
-  if (order) {
-    const ordered: Record<string, Item[]> = {}
-    for (const col of order) if (groups[col]) ordered[col] = groups[col]
-    // append any unexpected keys at the end
-    for (const key of Object.keys(groups)) if (!ordered[key]) ordered[key] = groups[key]
-    return ordered
-  }
-
-  return groups
-}
 
 export function groupItems(
   items: Item[],
@@ -133,16 +108,9 @@ export function groupItems(
   return groups
 }
 
-const URGENCY_COLORS: Record<string, string> = {}
-export function urgencyColor(score: number): string {
-  if (score >= 85) return "bg-red-100 text-red-700 border-red-200"
-  if (score >= 60) return "bg-orange-100 text-orange-700 border-orange-200"
-  if (score >= 35) return "bg-yellow-100 text-yellow-700 border-yellow-200"
-  return "bg-green-100 text-green-700 border-green-200"
-}
 
 export function fieldLabel(field: string): string {
-  const map: Record<string, string> = {
+  const overrides: Record<string, string> = {
     subject: "Subject",
     sender: "Email",
     sender_name: "From",
@@ -155,7 +123,7 @@ export function fieldLabel(field: string): string {
     due_date: "Due",
     tags: "Tags",
   }
-  return map[field] ?? field
+  return overrides[field] ?? field.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 export function formatDate(iso: string | null): string {

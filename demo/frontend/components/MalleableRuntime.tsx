@@ -95,7 +95,19 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
     // convention-based path derived from the intent string.
     const endpoints = (manifest?.endpoints as Array<Record<string, string>> | undefined) ?? []
     const ep = endpoints.find((e) => e.intent === schema.data_source)
-    const path = ep?.path ?? (schema.data_source === "list_actionable" ? "/threads/actionable" : "/threads")
+    const LEGACY_PATHS: Record<string, string> = {
+      list_actionable: "/threads/actionable",
+      list_all: "/threads",
+    }
+    const path = ep?.path ?? LEGACY_PATHS[schema.data_source]
+    if (!path) {
+      console.warn(
+        `[MalleableRuntime] No endpoint path found for data_source="${schema.data_source}". ` +
+        `Add path= to the @semantic decorator on the backend, or update LEGACY_PATHS.`
+      )
+      setLoading(false)
+      return
+    }
 
     setLoading(true)
     fetch(`${API}${path}`)
