@@ -56,6 +56,22 @@ export default function ChatModal({
     return () => mq.removeEventListener("change", handler)
   }, [])
 
+  // Re-clamp dragged position whenever the window is resized so the button
+  // never ends up outside the viewport after the user makes the window smaller.
+  useEffect(() => {
+    function handleResize() {
+      setPos(prev => {
+        if (!prev) return prev
+        const clampedX = Math.max(0, Math.min(prev.x, window.innerWidth - BUTTON_SIZE))
+        const clampedY = Math.max(0, Math.min(prev.y, window.innerHeight - BUTTON_SIZE))
+        if (clampedX === prev.x && clampedY === prev.y) return prev
+        return { x: clampedX, y: clampedY }
+      })
+    }
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
+  }, [])
+
   // Auto-open on agent question or inspect click
   useEffect(() => {
     if (lastMessage?.role === "assistant" && !lastMessage.generatedComponent) setIsOpen(true)
