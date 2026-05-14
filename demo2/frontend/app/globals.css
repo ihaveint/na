@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+/* Ensure the full utility palette is available for dynamically generated components */
+@source inline("{text,bg,border}-{red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose,zinc,slate,gray,neutral,stone,white,black}-{50,100,200,300,400,500,600,700,800,900,950}");
+@source inline("font-{thin,extralight,light,normal,medium,semibold,bold,extrabold,black}");
+@source inline("italic not-italic underline line-through");
+@source inline("rounded-{none,sm,md,lg,xl,2xl,3xl,full}");
+@source inline("opacity-{0,5,10,20,25,30,40,50,60,70,75,80,90,95,100}");
+@source inline("shadow-{none,sm,md,lg,xl,2xl}");
+@source inline("text-{xs,sm,base,lg,xl,2xl,3xl,4xl}");
+@source inline("{p,px,py,pt,pb,pl,pr,m,mx,my,mt,mb,ml,mr,gap}-{0,0.5,1,1.5,2,2.5,3,3.5,4,5,6,7,8,9,10,11,12,14,16,20,24,28,32}");
+@source inline("w-{full,auto,fit,max,min,1,2,3,4,5,6,7,8,9,10,11,12,14,16,20,24,28,32,36,40,48,56,64,72,80,96}");
+@source inline("h-{full,auto,fit,max,min,1,2,3,4,5,6,7,8,9,10,11,12,14,16,20,24,28,32,36,40,48,56,64,72,80,96}");
+@source inline("max-{w,h}-{none,xs,sm,md,lg,xl,2xl,3xl,full,screen}");
+@source inline("{overflow,overflow-x,overflow-y}-{auto,hidden,visible,scroll}");
+@source inline("flex-{1,auto,none,shrink,shrink-0,grow,grow-0,col,row,wrap,nowrap}");
+@source inline("{items,justify,self}-{start,end,center,between,around,evenly,stretch,baseline}");
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: #ffffff;
+  color: #171717;
+}
