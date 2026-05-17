@@ -1,15 +1,16 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
-import type { Transaction } from "@/lib/types"
-import { formatDate, formatAmount, categoryColor, groupTransactions } from "@/lib/utils"
+import type { Item } from "./types"
+import { formatDate, groupItems } from "./utils"
 
 interface Props {
   code: string
-  transactions: Transaction[]
-  onTransactionClick?: (tx: Transaction) => void
+  items: Item[]
+  onItemClick?: (item: Item) => void
+  extraScope?: Record<string, unknown>
 }
 
-export default function DynamicView({ code, transactions, onTransactionClick }: Props) {
+export default function DynamicView({ code, items, onItemClick, extraScope }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<ReturnType<typeof import("react-dom/client")["createRoot"]> | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -34,18 +35,17 @@ export default function DynamicView({ code, transactions, onTransactionClick }: 
           filename: "dynamic.jsx",
         }).code!
 
-        const scope = {
+        const scope: Record<string, unknown> = {
           React: React.default,
           useState: React.useState,
           useEffect: React.useEffect,
           useMemo: React.useMemo,
           formatDate,
-          formatAmount,
-          categoryColor,
-          groupTransactions,
+          groupItems,
+          onItemClick,
+          ...extraScope,
         }
 
-        // eslint-disable-next-line no-new-func
         const factory = new Function(...Object.keys(scope), `${transpiled}; return Layout;`)
         const Layout = factory(...Object.values(scope))
 
@@ -55,9 +55,7 @@ export default function DynamicView({ code, transactions, onTransactionClick }: 
           rootRef.current = ReactDOM.createRoot(containerRef.current)
         }
 
-        rootRef.current.render(
-          React.default.createElement(Layout, { transactions, onTransactionClick })
-        )
+        rootRef.current.render(React.default.createElement(Layout, { items, onItemClick }))
         setError(null)
       } catch (e: unknown) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
@@ -66,7 +64,7 @@ export default function DynamicView({ code, transactions, onTransactionClick }: 
 
     render()
     return () => { cancelled = true }
-  }, [code, transactions])
+  }, [code, items, extraScope])
 
   if (error) {
     return (
@@ -77,5 +75,5 @@ export default function DynamicView({ code, transactions, onTransactionClick }: 
     )
   }
 
-  return <div ref={containerRef} className="h-full w-full overflow-auto" data-dynamic-root />
+  return <div ref={containerRef} className="h-full w-full overflow-auto" />
 }

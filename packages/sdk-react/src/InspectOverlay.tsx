@@ -29,7 +29,6 @@ export default function InspectOverlay({ active, onElementClick }: Props) {
   function buildContext(el: Element): string {
     const text = el.textContent?.trim().replace(/\s+/g, " ").slice(0, 60) ?? ""
 
-    // Walk up to find the nearest data-sc sub-component marker
     let scName: string | null = null
     let cursor: Element | null = el
     while (cursor && !cursor.hasAttribute("data-dynamic-root")) {
@@ -84,7 +83,6 @@ export default function InspectOverlay({ active, onElementClick }: Props) {
 
   return (
     <>
-      {/* Transparent intercept layer */}
       <div
         ref={overlayRef}
         className="absolute inset-0 cursor-crosshair"
@@ -93,8 +91,6 @@ export default function InspectOverlay({ active, onElementClick }: Props) {
         onMouseLeave={handleMouseLeave}
         onClick={handleClick}
       />
-
-      {/* Highlight ring — fixed so viewport coords work regardless of scroll */}
       {highlight && (
         <div
           className="pointer-events-none fixed rounded-sm"
@@ -109,8 +105,6 @@ export default function InspectOverlay({ active, onElementClick }: Props) {
           }}
         />
       )}
-
-      {/* Tooltip */}
       {tooltip && (
         <div
           className="pointer-events-none fixed px-2 py-1 bg-zinc-900 text-white text-xs rounded-md shadow-lg max-w-xs truncate"

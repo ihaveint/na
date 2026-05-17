@@ -1,5 +1,5 @@
 "use client"
-import type { Version } from "@/lib/types"
+import type { Version } from "./types"
 
 interface Props {
   versions: Version[]
@@ -20,7 +20,6 @@ function relativeTime(ts: number): string {
 export default function HistoryDrawer({ versions, currentIndex, open, onClose, onRestore }: Props) {
   if (!open) return null
 
-  // Display newest first; track original index for restore
   const displayed = versions.map((v, i) => ({ ...v, originalIndex: i })).reverse()
 
   return (

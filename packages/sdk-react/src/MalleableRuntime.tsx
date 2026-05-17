@@ -1,49 +1,73 @@
 "use client"
-import { useEffect, useRef, useState } from "react"
-import type { Item, UISchema, Version, ChatMessage } from "@/lib/types"
-import ItemDetailPanel from "./ItemDetailPanel"
-import { applySchema, groupItems } from "@/lib/utils"
-import { useVersionHistory } from "@/lib/useVersionHistory"
-import ListView from "./layouts/ListView"
-import KanbanView from "./layouts/KanbanView"
-import TableView from "./layouts/TableView"
+import { useEffect, useRef, useState, type ComponentType } from "react"
+import type { Item, UISchema, Version, ChatMessage } from "./types"
+import { applySchema } from "./utils"
+import { useVersionHistory } from "./useVersionHistory"
+import ListView from "./ListView"
+import KanbanView from "./KanbanView"
+import TableView from "./TableView"
 import DynamicView from "./DynamicView"
 import ChatModal from "./ChatModal"
 import InspectOverlay from "./InspectOverlay"
 import HistoryDrawer from "./HistoryDrawer"
 
-const API = "http://localhost:8000"
+interface DetailPanelProps {
+  item: Item | null
+  onClose: () => void
+}
 
-interface Props {
+interface MalleableRuntimeProps {
+  apiUrl: string
+  storagePrefix: string
   schema: UISchema
   defaultSchema: UISchema
   onSchemaChange: (s: UISchema) => void
   personaId: string
+  detailPanel?: ComponentType<DetailPanelProps>
+  extraScope?: Record<string, unknown>
+  extraUI?: React.ReactNode
+  manifestEnabled?: boolean
+  customDataSources?: Record<string, string>
+  chatPlaceholder?: string
+  onItemSelect?: (item: Item) => void
+  layoutExtraProps?: Record<string, unknown>
 }
 
-export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange, personaId }: Props) {
+export default function MalleableRuntime({
+  apiUrl,
+  storagePrefix,
+  schema,
+  defaultSchema,
+  onSchemaChange,
+  personaId,
+  detailPanel: DetailPanel,
+  extraScope,
+  extraUI,
+  manifestEnabled,
+  customDataSources,
+  chatPlaceholder,
+  onItemSelect,
+  layoutExtraProps,
+}: MalleableRuntimeProps) {
   const [items, setItems] = useState<Item[]>([])
   const [manifest, setManifest] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(true)
   const [applying, setApplying] = useState(false)
   const [justApplied, setJustApplied] = useState(false)
 
-  // In share-mode tabs, use sessionStorage so state is tab-isolated.
-  // Lazy useState so localStorage/sessionStorage are never touched during SSR.
   const [store] = useState<Storage>(() => {
     if (typeof window === "undefined") return undefined as unknown as Storage
-    return sessionStorage.getItem("na:share-mode") ? sessionStorage : localStorage
+    return sessionStorage.getItem(`${storagePrefix}:share-mode`) ? sessionStorage : localStorage
   })
 
-  const { versions, currentIndex, push: pushVersion, restore: restoreVersion, clear: clearVersions } = useVersionHistory(`na:history:${personaId}`, store)
+  const { versions, currentIndex, push: pushVersion, restore: restoreVersion, clear: clearVersions } = useVersionHistory(`${storagePrefix}:history:${personaId}`, store)
   const savedVersion = versions[currentIndex] ?? null
 
-  // One-time read of a shared artifact dropped by page.tsx (?share= param)
   const sharedArtifact = useRef((() => {
     if (typeof window === "undefined") return null
     try {
-      const raw = sessionStorage.getItem("na:share")
-      if (raw) { sessionStorage.removeItem("na:share"); return JSON.parse(raw) }
+      const raw = sessionStorage.getItem(`${storagePrefix}:share`)
+      if (raw) { sessionStorage.removeItem(`${storagePrefix}:share`); return JSON.parse(raw) }
     } catch {}
     return null
   })())
@@ -57,7 +81,7 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>(() => {
     if (typeof window === "undefined") return []
     try {
-      const raw = store.getItem(`na:chat:${personaId}`)
+      const raw = store.getItem(`${storagePrefix}:chat:${personaId}`)
       return raw ? JSON.parse(raw) : (savedVersion?.chatSnapshot ?? [])
     } catch { return [] }
   })
@@ -70,18 +94,14 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
   const [shareState, setShareState] = useState<"idle" | "loading" | "copied" | "error">("idle")
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [shareCopied, setShareCopied] = useState(false)
-  // Prevents SSR/client hydration mismatches on localStorage-derived UI (e.g. version badge).
-  // Server renders with versions=[] (no localStorage), client may have saved versions.
-  // Gate any such UI behind `mounted` so both sides agree on the initial render.
   const [mounted, setMounted] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const isFirstRender = useRef(true)
 
   useEffect(() => { setMounted(true) }, [])
 
-  // Persist chat history for this persona (sessionStorage in share-mode tabs)
   useEffect(() => {
-    try { store.setItem(`na:chat:${personaId}`, JSON.stringify(chatHistory)) } catch {}
+    try { store.setItem(`${storagePrefix}:chat:${personaId}`, JSON.stringify(chatHistory)) } catch {}
   }, [chatHistory, personaId, store])
 
   useEffect(() => {
@@ -90,37 +110,29 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
   }, [schema, componentCode])
 
   useEffect(() => {
-    fetch(`${API}/manifest`)
+    if (!manifestEnabled) return
+    fetch(`${apiUrl}/manifest`)
       .then((r) => r.json())
       .then((m) => setManifest(m))
-      .catch(() => {}) // non-fatal; falls back to hardcoded path below
-  }, [])
+      .catch(() => {})
+  }, [manifestEnabled, apiUrl])
 
   useEffect(() => {
-    // Resolve the fetch URL from the manifest if available, else fall back to a
-    // convention-based path derived from the intent string.
     const endpoints = (manifest?.endpoints as Array<Record<string, string>> | undefined) ?? []
     const ep = endpoints.find((e) => e.intent === schema.data_source)
-    const LEGACY_PATHS: Record<string, string> = {
-      list_actionable: "/threads/actionable",
-      list_all: "/threads",
-    }
-    const path = ep?.path ?? LEGACY_PATHS[schema.data_source]
+    const path = ep?.path ?? customDataSources?.[schema.data_source]
     if (!path) {
-      console.warn(
-        `[MalleableRuntime] No endpoint path found for data_source="${schema.data_source}". ` +
-        `Add path= to the @semantic decorator on the backend, or update LEGACY_PATHS.`
-      )
+      console.warn(`[MalleableRuntime] No endpoint path found for data_source="${schema.data_source}".`)
       setLoading(false)
       return
     }
 
     setLoading(true)
-    fetch(`${API}${path}`)
+    fetch(`${apiUrl}${path}`)
       .then((r) => r.json())
       .then((data) => { setItems(data); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [schema.data_source, manifest])
+  }, [schema.data_source, manifest, apiUrl])
 
   const displayed = applySchema(items, schema)
 
@@ -133,8 +145,6 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
         ],
         { duration: 400, easing: "cubic-bezier(0.16, 1, 0.3, 1)", fill: "both" }
       )
-      // Cancel after finish so transform/filter don't persist on the div.
-      // Both create a new stacking context that breaks position:fixed children (the inspect overlay).
       if (anim) anim.onfinish = () => anim.cancel()
     }, 0)
   }
@@ -144,19 +154,23 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
     setTimeout(() => setJustApplied(false), 1500)
   }
 
+  function handleItemClick(item: Item) {
+    setSelectedItem(item)
+    onItemSelect?.(item)
+  }
+
   async function handleSend(message: string) {
     const userMessage: ChatMessage = { role: "user", content: message }
     const nextHistory = [...chatHistory, userMessage]
     setChatHistory(nextHistory)
     setApplying(true)
 
-    // Strip system messages before sending — they're UI-only markers
     const apiMessages = nextHistory
       .filter((m) => !m.isSystem)
       .map((m) => ({ role: m.role, content: m.content }))
 
     try {
-      const res = await fetch(`${API}/chat`, {
+      const res = await fetch(`${apiUrl}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -176,7 +190,6 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
       }
       const fullHistory = [...nextHistory, assistantMessage]
       setChatHistory(fullHistory)
-      // Snapshot excludes system messages so restoring to this version gives clean context
       const chatSnapshot = fullHistory.filter((m) => !m.isSystem)
 
       if (data.action === "schema" && data.schema) {
@@ -204,7 +217,7 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
     setRenderMode(v.renderMode)
     setComponentCode(v.componentCode)
     setChatHistory(() => {
-      const newSystemMessage: ChatMessage = { role: "assistant", content: `↩ Restored to: ${v.label}`, isSystem: true }
+      const newSystemMessage: ChatMessage = { role: "assistant", content: `\u21a9 Restored to: ${v.label}`, isSystem: true }
       return [...v.chatSnapshot, newSystemMessage]
     })
     setInspectContext(null)
@@ -223,7 +236,7 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
     setShareState("loading")
     try {
       const label = versions[currentIndex]?.label ?? "Custom view"
-      const res = await fetch(`${API}/share`, {
+      const res = await fetch(`${apiUrl}/share`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ schema, componentCode, renderMode, label, personaId }),
@@ -232,8 +245,7 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
       const url = `${window.location.origin}${window.location.pathname}?share=${id}`
       setShareUrl(url)
       setShareState("copied")
-    } catch (e) {
-      console.error("Share failed:", e)
+    } catch {
       setShareState("error")
       setTimeout(() => setShareState("idle"), 2000)
     }
@@ -241,13 +253,11 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
 
   return (
     <div className="flex flex-col h-full">
-      {/* Top bar */}
       <div className={`
         border-b flex items-center bg-zinc-50 flex-shrink-0 min-w-0
         transition-all duration-500
         ${justApplied ? "border-violet-400 bg-violet-50" : "border-zinc-200"}
       `}>
-        {/* Scrollable pills section */}
         <div className="flex-1 overflow-x-auto min-w-0">
           <div className="flex items-center gap-2 px-4 py-2.5 w-max min-w-full">
             {renderMode === "schema" ? (
@@ -255,7 +265,6 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
                 <LayoutBadge layout={schema.layout} />
                 {schema.group_by && <Pill label="group" value={schema.group_by} />}
                 {schema.sort_by && <Pill label="sort" value={`${schema.sort_by} ${schema.sort_direction}`} />}
-                {schema.data_source === "list_actionable" && <Pill label="filter" value="actionable only" />}
                 {schema.filters.map((f, i) => (
                   <Pill key={i} label={f.field} value={`${f.op} ${f.value}`} />
                 ))}
@@ -276,9 +285,9 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
                     setRenderMode("schema")
                     setInspectContext(null)
                     setInspectMode(false)
-                    const systemMessage: ChatMessage = { role: "assistant", content: "↩ Reset to default view", isSystem: true }
+                    const systemMessage: ChatMessage = { role: "assistant", content: "\u21a9 Reset to default view", isSystem: true }
                     setChatHistory((prev) => {
-                      const filtered = prev.filter((m) => !(m.isSystem && m.content.startsWith("↩ Reset")))
+                      const filtered = prev.filter((m) => !(m.isSystem && m.content.startsWith("\u21a9 Reset")))
                       return [...filtered, systemMessage]
                     })
                     pushVersion({ label: "Reset to default view", schema: defaultSchema, componentCode: null, renderMode: "schema", chatSnapshot: chatHistory.filter((m) => !m.isSystem) })
@@ -292,14 +301,12 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
           </div>
         </div>
 
-        {/* Pinned action buttons */}
         <div className="flex items-center gap-1.5 px-2 py-2.5 flex-shrink-0 border-l border-zinc-100">
           <span className={`text-xs font-medium text-violet-600 transition-opacity duration-300 ${justApplied ? "opacity-100" : "opacity-0"}`}>
             Applied
           </span>
           {mounted && <span className="text-xs text-zinc-400 hidden sm:inline">{displayed.length}</span>}
 
-          {/* Inspect toggle */}
           <button
             onClick={() => setInspectMode((v) => !v)}
             title="Click any element to chat about it"
@@ -312,10 +319,9 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
             </svg>
-            <span className="hidden sm:inline">{inspectMode ? "Inspecting…" : "Inspect"}</span>
+            <span className="hidden sm:inline">{inspectMode ? "Inspecting\u2026" : "Inspect"}</span>
           </button>
 
-          {/* History button */}
           <button
             onClick={() => setShowHistory((v) => !v)}
             title="View history"
@@ -331,7 +337,6 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
             {mounted && versions.length > 0 && <span>{versions.length}</span>}
           </button>
 
-          {/* Share button */}
           <div className="relative">
             <button
               onClick={shareUrl ? () => { setShareUrl(null); setShareState("idle") } : handleShare}
@@ -344,7 +349,7 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <polyline points="20 6 9 17 4 12"/>
                   </svg>
-                  <span className="hidden sm:inline">Link ready ×</span>
+                  <span className="hidden sm:inline">Link ready \u00d7</span>
                 </>
               ) : shareState === "error" ? (
                 <span className="text-red-500">!</span>
@@ -353,7 +358,7 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>
                   </svg>
-                  <span className="hidden sm:inline">{shareState === "loading" ? "Sharing…" : "Share"}</span>
+                  <span className="hidden sm:inline">{shareState === "loading" ? "Sharing\u2026" : "Share"}</span>
                 </>
               )}
             </button>
@@ -383,29 +388,29 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
         </div>
       </div>
 
-      {/* Generated code panel */}
       {renderMode === "component" && showCode && componentCode && (
         <div className="border-b border-zinc-200 bg-zinc-950 text-zinc-300 text-xs font-mono p-4 max-h-64 overflow-auto flex-shrink-0">
           <pre className="whitespace-pre-wrap">{componentCode}</pre>
         </div>
       )}
 
-      {/* Content */}
       <div ref={contentRef} className="flex-1 overflow-auto relative min-h-0">
         {loading ? (
-          <div className="flex items-center justify-center h-full text-zinc-400 text-sm">Loading…</div>
+          <div className="flex items-center justify-center h-full text-zinc-400 text-sm">Loading\u2026</div>
         ) : renderMode === "component" && componentCode ? (
-          <DynamicView code={componentCode} items={displayed} onItemClick={setSelectedItem} />
+          <DynamicView code={componentCode} items={displayed} onItemClick={handleItemClick} extraScope={extraScope} {...layoutExtraProps} />
         ) : schema.layout === "kanban" ? (
-          <KanbanView items={displayed} schema={schema} onItemClick={setSelectedItem} />
+          <KanbanView items={displayed} schema={schema} onItemClick={handleItemClick} {...layoutExtraProps} />
         ) : schema.layout === "table" ? (
-          <TableView items={displayed} schema={schema} onItemClick={setSelectedItem} />
+          <TableView items={displayed} schema={schema} onItemClick={handleItemClick} {...layoutExtraProps} />
         ) : (
-          <ListView items={displayed} schema={schema} onItemClick={setSelectedItem} />
+          <ListView items={displayed} schema={schema} onItemClick={handleItemClick} {...layoutExtraProps} />
         )}
 
         <InspectOverlay active={inspectMode} onElementClick={handleElementClick} />
       </div>
+
+      {extraUI}
 
       <HistoryDrawer
         versions={versions}
@@ -415,12 +420,13 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
         onRestore={handleRestore}
       />
 
-      <ItemDetailPanel
-        item={selectedItem}
-        onClose={() => setSelectedItem(null)}
-      />
+      {DetailPanel && (
+        <DetailPanel
+          item={selectedItem}
+          onClose={() => setSelectedItem(null)}
+        />
+      )}
 
-      {/* Floating chat */}
       <ChatModal
         messages={chatHistory}
         applying={applying}
@@ -428,6 +434,7 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
         inspectContext={inspectContext}
         onClearInspectContext={() => setInspectContext(null)}
         onSend={handleSend}
+        placeholder={chatPlaceholder}
       />
     </div>
   )

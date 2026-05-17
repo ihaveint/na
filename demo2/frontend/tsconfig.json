@@ -19,7 +19,16 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@malleable/react": ["../../packages/sdk-react/src"],
+      "react": ["./node_modules/@types/react"],
+      "react-dom": ["./node_modules/@types/react-dom"],
+      "react/jsx-runtime": ["./node_modules/@types/react"],
+      "react-dom/client": ["./node_modules/@types/react-dom/client"],
+      "@babel/standalone": ["./node_modules/@types/babel__standalone"],
+      "clsx": ["./node_modules/clsx"],
+      "tailwind-merge": ["./node_modules/tailwind-merge"],
+      "lucide-react": ["./node_modules/lucide-react"]
     }
   },
   "include": [

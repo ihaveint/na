@@ -1,13 +1,10 @@
 "use client"
+import type { Item } from "@malleable/react"
 import type { Transaction } from "@/lib/types"
 import { categoryColor, formatAmount, formatDate } from "@/lib/utils"
 
-interface Props {
-  transaction: Transaction | null
-  onClose: () => void
-}
-
-export default function TransactionDetailPanel({ transaction, onClose }: Props) {
+export default function TransactionDetailPanel({ item, onClose }: { item: Item | null; onClose: () => void }) {
+  const transaction = item as Transaction | null
   if (!transaction) return null
 
   const tx = transaction

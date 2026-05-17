@@ -1,8 +1,9 @@
 "use client"
 import { useState, useEffect } from "react"
-import type { UISchema } from "@/lib/types"
+import type { UISchema } from "@malleable/react"
+import { MalleableRuntime } from "@malleable/react"
 import { PERSONAS } from "@/lib/personas"
-import MalleableRuntime from "@/components/MalleableRuntime"
+import TransactionDetailPanel from "@/components/TransactionDetailPanel"
 
 const PERSONA_KEY = "ledger:persona"
 const SCHEMAS_KEY  = "ledger:schemas"
@@ -34,7 +35,7 @@ export default function Home() {
 
     const shareId = new URLSearchParams(window.location.search).get("share")
     if (shareId) {
-      fetch(`http://localhost:8001/share/${shareId}`)
+      fetch("http://localhost:8001/share/" + shareId)
         .then((r) => r.ok ? r.json() : null)
         .then((artifact) => {
           if (!artifact) return
@@ -164,10 +165,19 @@ export default function Home() {
         <div className="flex-1 overflow-hidden min-h-0">
           <MalleableRuntime
             key={activePersona}
+            apiUrl="http://localhost:8001"
+            storagePrefix="ledger"
             schema={schema}
             defaultSchema={PERSONAS.find((p) => p.id === activePersona)!.schema}
             onSchemaChange={(s) => { setSchema(s); updateSchema(activePersona, s) }}
             personaId={activePersona}
+            manifestEnabled={false}
+            customDataSources={{
+              list_all: "/transactions",
+              list_expenses: "/transactions/expenses",
+              list_income: "/transactions/income",
+            }}
+            detailPanel={TransactionDetailPanel}
           />
         </div>
       </main>

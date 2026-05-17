@@ -1,6 +1,6 @@
 "use client"
-import type { Item, UISchema } from "@/lib/types"
-import { cn, formatDate, fieldLabel } from "@/lib/utils"
+import type { Item, UISchema } from "./types"
+import { cn, formatDate } from "./utils"
 
 interface Props {
   items: Item[]

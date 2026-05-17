@@ -1,11 +1,12 @@
 "use client"
 import { useState, useEffect } from "react"
-import type { UISchema } from "@/lib/types"
+import type { UISchema } from "@malleable/react"
+import { MalleableRuntime } from "@malleable/react"
 import { PERSONAS } from "@/lib/personas"
-import MalleableRuntime from "@/components/MalleableRuntime"
+import ItemDetailPanel from "@/components/ItemDetailPanel"
 
 const PERSONA_KEY = "malleable:persona"
-const SCHEMAS_KEY  = "malleable:schemas" // per-persona map
+const SCHEMAS_KEY  = "malleable:schemas"
 
 function loadSchemas(): Record<string, UISchema> {
   try {
@@ -32,16 +33,13 @@ export default function Home() {
     const activeSchema = saved[persona] ?? PERSONAS.find((p) => p.id === persona)!.schema
     setSchemas(saved)
 
-    // Load a shared artifact if ?share= is in the URL
     const shareId = new URLSearchParams(window.location.search).get("share")
     if (shareId) {
-      fetch(`http://localhost:8000/share/${shareId}`)
+      fetch("http://localhost:8000/share/" + shareId)
         .then((r) => r.ok ? r.json() : null)
         .then((artifact) => {
           if (!artifact) return
           const targetPersona = PERSONAS.find((p) => p.id === artifact.personaId)?.id ?? persona
-          // Mark this tab as a share session — MalleableRuntime will use
-          // sessionStorage instead of localStorage, keeping it fully isolated
           sessionStorage.setItem("na:share-mode", "1")
           if (artifact.componentCode) {
             sessionStorage.setItem("na:share", JSON.stringify({
@@ -73,7 +71,6 @@ export default function Home() {
   function selectPersona(id: string) {
     const p = PERSONAS.find((p) => p.id === id)
     if (!p) return
-    // restore saved schema for this persona, falling back to its default
     const restored = schemas[id] ?? p.schema
     setActivePersona(id)
     setSchema(restored)
@@ -141,12 +138,10 @@ export default function Home() {
 
   return (
     <div className="flex h-screen bg-white font-sans">
-      {/* sidebar — desktop: always visible; mobile: overlay drawer */}
       <aside className="hidden md:flex w-56 flex-shrink-0 border-r border-zinc-200 flex-col bg-zinc-50">
         <SidebarContent />
       </aside>
 
-      {/* mobile sidebar overlay */}
       {sidebarOpen && (
         <>
           <div className="fixed inset-0 z-[9998] bg-black/30 md:hidden" onClick={() => setSidebarOpen(false)} />
@@ -156,10 +151,8 @@ export default function Home() {
         </>
       )}
 
-      {/* main */}
       <main className="flex-1 flex flex-col overflow-hidden min-w-0">
         <header className="px-4 md:px-6 py-3 border-b border-zinc-200 flex items-center justify-between gap-2">
-          {/* hamburger — mobile only */}
           <button
             onClick={() => setSidebarOpen(true)}
             className="md:hidden flex items-center justify-center w-8 h-8 rounded hover:bg-zinc-100 text-zinc-500 flex-shrink-0"
@@ -179,10 +172,14 @@ export default function Home() {
         <div className="flex-1 overflow-hidden min-h-0">
           <MalleableRuntime
             key={activePersona}
+            apiUrl="http://localhost:8000"
+            storagePrefix="na"
             schema={schema}
             defaultSchema={PERSONAS.find((p) => p.id === activePersona)!.schema}
             onSchemaChange={(s) => { setSchema(s); updateSchema(activePersona, s) }}
             personaId={activePersona}
+            manifestEnabled={true}
+            detailPanel={ItemDetailPanel}
           />
         </div>
       </main>

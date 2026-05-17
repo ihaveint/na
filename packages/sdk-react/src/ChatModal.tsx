@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import type { ChatMessage } from "./ChatPanel"
+import type { ChatMessage } from "./types"
 
 const BUTTON_SIZE = 44
 const MODAL_WIDTH = 320
@@ -16,6 +16,7 @@ interface Props {
   inspectContext: string | null
   onClearInspectContext: () => void
   onSend: (message: string) => void
+  placeholder?: string
 }
 
 export default function ChatModal({
@@ -25,12 +26,11 @@ export default function ChatModal({
   inspectContext,
   onClearInspectContext,
   onSend,
+  placeholder,
 }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const [input, setInput] = useState("")
-  // isMobile: null = not yet measured (renders nothing); true/false = measured
   const [isMobile, setIsMobile] = useState<boolean | null>(null)
-  // null = use CSS default (bottom-left corner via fixed + bottom/left)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -46,8 +46,6 @@ export default function ChatModal({
   const lastMessage = messages[messages.length - 1]
   const hasUnread = !isOpen && lastMessage?.role === "assistant" && !lastMessage.generatedComponent
 
-  // Single effect: measures mobile breakpoint and marks mounted in one batch.
-  // Keeping these together guarantees isMobile is known before anything renders.
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)")
     setIsMobile(mq.matches)
@@ -56,8 +54,6 @@ export default function ChatModal({
     return () => mq.removeEventListener("change", handler)
   }, [])
 
-  // Re-clamp dragged position whenever the window is resized so the button
-  // never ends up outside the viewport after the user makes the window smaller.
   useEffect(() => {
     function handleResize() {
       setPos(prev => {
@@ -72,7 +68,6 @@ export default function ChatModal({
     return () => window.removeEventListener("resize", handleResize)
   }, [])
 
-  // Auto-open on agent question or inspect click
   useEffect(() => {
     if (lastMessage?.role === "assistant" && !lastMessage.generatedComponent) setIsOpen(true)
   }, [messages])
@@ -89,8 +84,6 @@ export default function ChatModal({
       }, 50)
     }
   }, [isOpen, messages.length])
-
-  // ── Drag ──────────────────────────────────────────────────────────────────
 
   function handleMouseDown(e: React.MouseEvent<HTMLButtonElement>) {
     e.preventDefault()
@@ -129,8 +122,6 @@ export default function ChatModal({
     document.addEventListener("mouseup", onMouseUp)
   }
 
-  // ── Derived positions ──────────────────────────────────────────────────────
-
   const buttonStyle: React.CSSProperties = pos
     ? { position: "fixed", left: pos.x, top: pos.y, zIndex: 50 }
     : { position: "fixed", bottom: EDGE, left: EDGE, zIndex: 50 }
@@ -142,8 +133,6 @@ export default function ChatModal({
     return { position: "fixed", top, left, zIndex: 50 }
   })()
 
-  // ── Send ──────────────────────────────────────────────────────────────────
-
   function handleSend() {
     if (!input.trim() || applying) return
     const message = inspectContext ? `About ${inspectContext}: ${input.trim()}` : input.trim()
@@ -151,8 +140,6 @@ export default function ChatModal({
     setInput("")
     onClearInspectContext()
   }
-
-  // ── Render ────────────────────────────────────────────────────────────────
 
   const chatBody = (
     <>
@@ -174,7 +161,7 @@ export default function ChatModal({
           <p className="text-xs text-zinc-400 text-center py-6">
             {hasComponent
               ? "Ask the agent to modify the layout, or click Inspect to talk about a specific element."
-              : "Describe how you'd like your email displayed. The agent will ask follow-up questions if needed."}
+              : "Describe how you'd like your data displayed. The agent will ask follow-up questions if needed."}
           </p>
         ) : (
           messages.map((msg, i) => {
@@ -183,7 +170,7 @@ export default function ChatModal({
                 <div key={i} className="flex items-center gap-2 py-1">
                   <div className="flex-1 h-px bg-zinc-200" />
                   <span className="text-[10px] text-zinc-400 whitespace-nowrap" title={msg.content}>
-                    {msg.content.length > 42 ? msg.content.slice(0, 42) + "…" : msg.content}
+                    {msg.content.length > 42 ? msg.content.slice(0, 42) + "\u2026" : msg.content}
                   </span>
                   <div className="flex-1 h-px bg-zinc-200" />
                 </div>
@@ -235,9 +222,9 @@ export default function ChatModal({
             ref={inputRef}
             className="flex-1 text-xs border border-zinc-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400 placeholder:text-zinc-400 disabled:opacity-50"
             placeholder={
-              applying ? "Thinking…" :
+              applying ? "Thinking\u2026" :
               inspectContext ? "What would you like to change?" :
-              "Message the agent…"
+              placeholder ?? "Message the agent\u2026"
             }
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -249,20 +236,17 @@ export default function ChatModal({
             disabled={applying || !input.trim()}
             className="px-3 py-2 bg-violet-600 text-white text-xs font-semibold rounded-lg hover:bg-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            {applying ? "…" : "→"}
+            {applying ? "\u2026" : "\u2192"}
           </button>
         </div>
       </div>
     </>
   )
 
-  // Don't render until we know whether we're on mobile — avoids showing
-  // the wrong button (desktop FAB) for even one frame on a phone.
   if (isMobile === null) return null
 
   return createPortal(
     <>
-      {/* ── Desktop: floating draggable modal ── */}
       {!isMobile && isOpen && (
         <div
           className="flex bg-white rounded-2xl shadow-2xl border border-zinc-200 flex-col overflow-hidden"
@@ -272,7 +256,6 @@ export default function ChatModal({
         </div>
       )}
 
-      {/* Desktop draggable button */}
       {!isMobile && (
         <button
           ref={buttonRef}
@@ -297,15 +280,11 @@ export default function ChatModal({
         </button>
       )}
 
-      {/* ── Mobile: bottom sheet ── */}
       {isMobile && (
         <>
-          {/* Backdrop */}
           {isOpen && (
             <div className="fixed inset-0 bg-black/30 z-[9996]" onClick={() => setIsOpen(false)} />
           )}
-
-          {/* Sheet */}
           <div
             className={`fixed bottom-0 left-0 right-0 z-[9997] bg-white rounded-t-2xl shadow-2xl flex flex-col transition-transform duration-300 ${
               isOpen ? "translate-y-0" : "translate-y-full"
@@ -314,8 +293,6 @@ export default function ChatModal({
           >
             {chatBody}
           </div>
-
-          {/* Mobile FAB */}
           {!isOpen && (
             <button
               onClick={() => setIsOpen(true)}
