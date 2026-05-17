@@ -82,7 +82,7 @@ def find_undefined_components(code: str) -> list[str]:
 
 def is_bug_report(get_anthropic: Callable[[], anthropic.Anthropic], message: str) -> bool:
     resp = get_anthropic().messages.create(
-        model="claude-haiku-4-5-20251001",
+        model="claude-haiku-4-5",
         max_tokens=8,
         system=(
             "Reply with only 'yes' or 'no'. "

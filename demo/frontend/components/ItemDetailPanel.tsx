@@ -1,6 +1,6 @@
 "use client"
-import type { Item } from "@/lib/types"
-import { formatDate, fieldLabel } from "@/lib/utils"
+import type { Item } from "@malleable/react"
+import { formatDate, fieldLabel } from "@malleable/react"
 
 interface Message {
   id: string

@@ -41,7 +41,7 @@ class MalleableConfig:
 
     # Domain-specific base component generator
     base_generator: BaseComponentGenerator | None = None
-    default_card_fields: list[str] = field(default_factory=lambda: ["subject", "sender_name"])
+    default_card_fields: list[str] = field(default_factory=list)
 
     # Pydantic model classes for request/response
     chat_request_model: type | None = None

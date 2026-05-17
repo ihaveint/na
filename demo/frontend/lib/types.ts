@@ -1,5 +1,8 @@
-export type Item = Record<string, unknown>
+// Framework types — single source of truth lives in @malleable/react
+import type { UISchema } from "@malleable/react"
+export type { Item, UISchema, ChatMessage, Version } from "@malleable/react"
 
+// Email-specific types
 export interface Message {
   id: string
   sender: string
@@ -7,13 +10,6 @@ export interface Message {
   date: string
   body: string
   is_self: boolean
-}
-
-export type ChatMessage = {
-  role: "user" | "assistant"
-  content: string
-  generatedComponent?: boolean
-  isSystem?: boolean
 }
 
 export interface Thread {
@@ -30,27 +26,6 @@ export interface Thread {
   due_date: string | null
   tags: string[]
   messages: Message[]
-}
-
-export interface UISchema {
-  layout: "list" | "kanban" | "calendar" | "table"
-  data_source: string
-  group_by: string | null
-  sort_by: string | null
-  sort_direction: "asc" | "desc"
-  card_fields: string[]
-  filters: { field: string; op: string; value: string }[]
-  actions: string[]
-}
-
-export interface Version {
-  id: string
-  timestamp: number
-  label: string
-  schema: UISchema
-  componentCode: string | null
-  renderMode: "schema" | "component"
-  chatSnapshot: ChatMessage[]
 }
 
 export interface Persona {

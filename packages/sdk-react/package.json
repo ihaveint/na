@@ -13,10 +13,12 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.11.0",
-    "next": "16.2.4",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
     "tailwind-merge": "^3.5.0"
+  },
+  "peerDependencies": {
+    "next": ">=15",
+    "react": ">=18",
+    "react-dom": ">=18"
   },
   "devDependencies": {
     "@types/babel__standalone": "^7.1.9",

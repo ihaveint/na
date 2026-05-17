@@ -13,6 +13,7 @@ from malleable_server.chat import (
 
 __all__ = [
     "create_malleable_app",
+    "MalleableConfig",
     "parse_subcomponents",
     "replace_subcomponent",
     "ensure_data_sc",
