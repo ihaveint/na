@@ -1,9 +1,7 @@
 import json
-import os
 import re
 import secrets
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Callable, Optional, Union
 
 import anthropic
@@ -65,14 +63,10 @@ def create_malleable_app(config: MalleableConfig) -> FastAPI:
     def get_anthropic() -> anthropic.Anthropic:
         nonlocal anthropic_client
         if anthropic_client is None:
-            api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-            env_file = Path.cwd() / ".env"
-            if not api_key and env_file.exists():
-                for line in env_file.read_text().splitlines():
-                    if line.startswith("ANTHROPIC_API_KEY="):
-                        api_key = line.split("=", 1)[1].strip()
-                        break
-            anthropic_client = anthropic.Anthropic(api_key=api_key)
+            # Anthropic() auto-reads ANTHROPIC_API_KEY from the environment.
+            # Each demo's main.py is responsible for calling load_dotenv() with
+            # the correct path before create_malleable_app() is invoked.
+            anthropic_client = anthropic.Anthropic()
         return anthropic_client
 
     # Resolve base generator

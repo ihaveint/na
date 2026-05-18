@@ -1,10 +1,14 @@
 from __future__ import annotations
 from datetime import datetime
+from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException
 
 from malleable import semantic
 from malleable_server import create_malleable_app, MalleableConfig, BaseComponentGenerator
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from models import Thread, SnoozeRequest, TagRequest, UISchema, ChatRequest, ShareArtifact
 from data import THREADS, THREADS_BY_ID
