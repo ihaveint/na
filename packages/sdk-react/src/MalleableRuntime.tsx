@@ -118,6 +118,9 @@ export default function MalleableRuntime({
   }, [manifestEnabled, apiUrl])
 
   useEffect(() => {
+    // If manifest fetching is enabled but hasn't arrived yet, wait silently.
+    if (manifestEnabled && manifest === null) return
+
     const endpoints = (manifest?.endpoints as Array<Record<string, string>> | undefined) ?? []
     const ep = endpoints.find((e) => e.intent === schema.data_source)
     const path = ep?.path ?? customDataSources?.[schema.data_source]
@@ -132,7 +135,7 @@ export default function MalleableRuntime({
       .then((r) => r.json())
       .then((data) => { setItems(data); setLoading(false) })
       .catch(() => setLoading(false))
-  }, [schema.data_source, manifest, apiUrl])
+  }, [schema.data_source, manifest, manifestEnabled, apiUrl, customDataSources])
 
   const displayed = applySchema(items, schema)
 

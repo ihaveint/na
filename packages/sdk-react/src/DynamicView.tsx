@@ -22,7 +22,7 @@ export default function DynamicView({ code, items, onItemClick, extraScope }: Pr
 
     async function render() {
       try {
-        const [Babel, ReactDOM, React] = await Promise.all([
+        const [babelMod, ReactDOM, React] = await Promise.all([
           import("@babel/standalone"),
           import("react-dom/client"),
           import("react"),
@@ -30,7 +30,14 @@ export default function DynamicView({ code, items, onItemClick, extraScope }: Pr
 
         if (cancelled) return
 
-        const transpiled = Babel.default.transform(code, {
+        // @babel/standalone may expose transform as a named export (ESM/newer webpack)
+        // or under .default (older CJS wrapping) — handle both.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const babelTransform: (code: string, opts: unknown) => { code: string } =
+          (babelMod as any).transform ?? (babelMod as any).default?.transform
+        if (!babelTransform) throw new Error("Could not resolve Babel.transform")
+
+        const transpiled = babelTransform(code, {
           presets: [["react", { runtime: "classic" }]],
           filename: "dynamic.jsx",
         }).code!
