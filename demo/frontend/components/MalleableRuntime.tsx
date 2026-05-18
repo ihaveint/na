@@ -12,7 +12,7 @@ import ChatModal from "./ChatModal"
 import InspectOverlay from "./InspectOverlay"
 import HistoryDrawer from "./HistoryDrawer"
 
-const API = "http://localhost:8000"
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
 interface Props {
   schema: UISchema
