@@ -288,12 +288,14 @@ export default function MalleableRuntime({
                     setRenderMode("schema")
                     setInspectContext(null)
                     setInspectMode(false)
+                    // Don't push a history entry \u2014 reset isn't a milestone worth tracking.
+                    // Mark no entry as current so previous entries remain restorable.
+                    restoreVersion(-1)
                     const systemMessage: ChatMessage = { role: "assistant", content: "\u21a9 Reset to default view", isSystem: true }
                     setChatHistory((prev) => {
                       const filtered = prev.filter((m) => !(m.isSystem && m.content.startsWith("\u21a9 Reset")))
                       return [...filtered, systemMessage]
                     })
-                    pushVersion({ label: "Reset to default view", schema: defaultSchema, componentCode: null, renderMode: "schema", chatSnapshot: chatHistory.filter((m) => !m.isSystem) })
                   }}
                   className="text-xs text-zinc-400 hover:text-zinc-600 hover:underline whitespace-nowrap"
                 >

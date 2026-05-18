@@ -52,8 +52,10 @@ export default function HistoryDrawer({ versions, currentIndex, open, onClose, o
               <div className="absolute left-[27px] top-0 bottom-0 w-px bg-zinc-100" />
 
               {displayed.map((v) => {
-                const isCurrent = v.originalIndex === currentIndex
-                const isFuture = v.originalIndex > currentIndex
+                const isCurrent = currentIndex >= 0 && v.originalIndex === currentIndex
+                // "Future" only makes sense when a version is active; if nothing is
+                // current (index = -1, e.g. after a reset) treat all as past.
+                const isFuture = currentIndex >= 0 && v.originalIndex > currentIndex
                 return (
                   <div key={v.id} className="flex gap-3 px-4 py-3 group">
                     <div className="flex-shrink-0 mt-1 relative z-10">
