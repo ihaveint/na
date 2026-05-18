@@ -2,7 +2,7 @@
 
 /* Scan the shared React package so arbitrary values (text-[10px], w-[300px], etc.)
    used in its components are included in the generated stylesheet. */
-@source "../../../../packages/sdk-react/src";
+@source "../../../packages/sdk-react/src";
 
 /* Ensure the full utility palette is available for dynamically generated components */
 @source inline("{text,bg,border}-{red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose,zinc,slate,gray,neutral,stone,white,black}-{50,100,200,300,400,500,600,700,800,900,950}");
