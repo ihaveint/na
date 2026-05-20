@@ -24,6 +24,7 @@ interface Props {
 export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange, personaId }: Props) {
   const [threads, setThreads] = useState<Thread[]>([])
   const [loading, setLoading] = useState(true)
+  const [backendError, setBackendError] = useState(false)
   const [applying, setApplying] = useState(false)
   const [justApplied, setJustApplied] = useState(false)
 
@@ -87,8 +88,8 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
     setLoading(true)
     fetch(`${API}${endpoint}`)
       .then((r) => r.json())
-      .then((data) => { setThreads(data); setLoading(false) })
-      .catch(() => setLoading(false))
+      .then((data) => { setThreads(data); setLoading(false); setBackendError(false) })
+      .catch(() => { setLoading(false); setBackendError(true) })
   }, [schema.data_source])
 
   const displayed = applySchema(threads, schema)
@@ -363,6 +364,11 @@ export default function MalleableRuntime({ schema, defaultSchema, onSchemaChange
       <div ref={contentRef} className="flex-1 overflow-auto relative min-h-0">
         {loading ? (
           <div className="flex items-center justify-center h-full text-zinc-400 text-sm">Loading…</div>
+        ) : backendError ? (
+          <div className="flex flex-col items-center justify-center h-full gap-1.5">
+            <p className="text-zinc-500 text-sm font-medium">Backend unavailable</p>
+            <p className="text-zinc-400 text-xs">The server is currently down. Try again later.</p>
+          </div>
         ) : renderMode === "component" && componentCode ? (
           <DynamicView code={componentCode} threads={displayed} onThreadClick={setSelectedThread} />
         ) : schema.layout === "kanban" ? (
