@@ -334,7 +334,9 @@ Always include at least ["subject","sender_name"] in card_fields.
 
 Props: { threads: Thread[], onThreadClick: (thread: Thread) => void }
 Call onThreadClick(thread) when the user clicks a card/row/item to open its email detail view. Always wire this up on clickable items.
-Already in scope — do NOT import: React, useState, useEffect, useMemo, formatDate(iso), urgencyColor(score), groupThreads(threads, field)
+Already in scope — do NOT import: React, useState, useEffect, useMemo, formatDate(iso), urgencyColor(score), groupThreads(threads, field), today
+
+today is a "YYYY-MM-DD" string in the user's local timezone. Use it for date comparisons (e.g. isDueToday = thread.due_date?.slice(0,10) === today). Never use new Date() comparisons across timezone boundaries.
 
 urgencyColor(score) returns a STRING of Tailwind classes like "bg-red-100 text-red-700 border-red-200".
 Use it ONLY in className, never in style. Example: <span className={urgencyColor(thread.urgency_score)}>
@@ -442,7 +444,7 @@ def _replace_subcomponent(code: str, name: str, new_func: str) -> str:
     return code
 
 
-def _make_subcomponent_modify_prompt(components: dict[str, str], target: str | None) -> str:
+def _make_subcomponent_modify_prompt(components: dict[str, str], target: str | None, today: str | None = None) -> str:
     if target and target in components:
         component_section = f"Modify this sub-component:\n```jsx\n{components[target]}\n```"
         other_sections = "\n\n".join(
@@ -470,15 +472,18 @@ def _make_subcomponent_modify_prompt(components: dict[str, str], target: str | N
         'Include every sub-component you modified in "changes". Most edits touch 1-2; never return unchanged components.\n'
         'Or if ambiguous: {"action":"question","message":"your question"}'
     )
+    today_line = f"Today's date: {today}\n\n" if today else ""
     return (
         "You are a surgical React component editor. Make the MINIMUM change needed.\n\n"
+        + today_line
         + component_section
         + "\n\nRULES:\n"
         "- Preserve ALL existing logic, variable names, and styling not explicitly mentioned.\n"
         "- Keep the `data-sc=\"ComponentName\"` attribute on the root element of every function you return.\n"
         "- Do NOT redesign, reformat, or restyle anything not explicitly requested.\n"
         "- PROP DRILLING: If adding a new prop to a child component, you MUST also update every parent that renders it to pass that prop through. Include all affected components in your changes array.\n"
-        "- Available in scope (do NOT import): React, useState, useEffect, useMemo, formatDate(iso), urgencyColor(score), groupThreads(threads, field)\n"
+        "- Available in scope (do NOT import): React, useState, useEffect, useMemo, formatDate(iso), urgencyColor(score), groupThreads(threads, field), today\n"
+        "- today is a \"YYYY-MM-DD\" string in the user's local timezone. Use it for due-date checks: thread.due_date?.slice(0,10) === today. Never construct new Date() and compare — timezone mismatch will break it.\n"
         "- Layout receives two props: `threads` (array) and `onThreadClick(thread)` (function). Call `onThreadClick(thread)` when the user clicks a thread/card/row to open its detail view. Always wire this up on clickable items.\n"
         + tooltip_rule + "\n"
         "- BORDER RADIUS: always use inline style={{borderRadius:'1rem'}} NOT Tailwind rounded-* classes. Tailwind rounded-* is unreliable in generated components.\n"
@@ -697,6 +702,8 @@ def _parse_response(raw: str) -> dict:
 
 @app.post("/chat")
 async def chat(body: ChatRequest):
+    today = datetime.now().strftime("%Y-%m-%d")
+    chat_system_prompt = f"Today's date: {today}\n\n{_CHAT_SYSTEM_PROMPT}"
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
 
     if body.current_code:
@@ -740,7 +747,7 @@ async def chat(body: ChatRequest):
         raw = get_anthropic().messages.create(
             model="claude-sonnet-4-6",
             max_tokens=8096,
-            system=_make_subcomponent_modify_prompt(components, target),
+            system=_make_subcomponent_modify_prompt(components, target, today),
             messages=messages,
         ).content[0].text.strip()
 
@@ -779,7 +786,7 @@ async def chat(body: ChatRequest):
                     raw2 = get_anthropic().messages.create(
                         model="claude-sonnet-4-6",
                         max_tokens=8096,
-                        system=_make_subcomponent_modify_prompt(components, target),
+                        system=_make_subcomponent_modify_prompt(components, target, today),
                         messages=messages + [{"role": "assistant", "content": raw}, {"role": "user", "content": fix_msg}],
                     ).content[0].text.strip()
                     try:
@@ -840,7 +847,7 @@ async def chat(body: ChatRequest):
     raw = get_anthropic().messages.create(
         model="claude-sonnet-4-6",
         max_tokens=4096,
-        system=_CHAT_SYSTEM_PROMPT,
+        system=chat_system_prompt,
         messages=messages,
     ).content[0].text.strip()
 
@@ -860,7 +867,7 @@ async def chat(body: ChatRequest):
             raw2 = get_anthropic().messages.create(
                 model="claude-sonnet-4-6",
                 max_tokens=8096,
-                system=_CHAT_SYSTEM_PROMPT,
+                system=chat_system_prompt,
                 messages=messages + [{"role": "assistant", "content": raw}, {"role": "user", "content": fix_msg}],
             ).content[0].text.strip()
             try:
