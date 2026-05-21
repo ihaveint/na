@@ -44,6 +44,7 @@ export default function DynamicView({ code, items, onItemClick }: Props) {
           filename: "dynamic.jsx",
         }).code!
 
+        const d = new Date()
         const scope = {
           React: React.default,
           useState: React.useState,
@@ -52,6 +53,8 @@ export default function DynamicView({ code, items, onItemClick }: Props) {
           formatDate,
           groupItems,
           onItemClick,
+          // Local-timezone YYYY-MM-DD — safe to compare against date-only ISO strings
+          today: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
         }
 
         // eslint-disable-next-line no-new-func
