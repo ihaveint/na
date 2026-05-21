@@ -331,9 +331,10 @@ Always include the primary display field in card_fields.
 
 Props: { items: Entity[], onItemClick: (item: Entity) => void }
 Call onItemClick(item) when the user clicks a card/row/item to open its detail view. Always wire this up on clickable items.
-Already in scope — do NOT import: React, useState, useEffect, useMemo, formatDate(iso), groupItems(items, field)
+Already in scope — do NOT import: React, useState, useEffect, useMemo, formatDate(iso), groupItems(items, field), today
 
 groupItems(items, field) groups an array by a field value and returns Record<string, Entity[]>.
+today is a "YYYY-MM-DD" string in the user's local timezone. Use it for date comparisons (e.g. isDueToday = item.due_date?.slice(0,10) === today). Never use new Date() comparisons across timezone boundaries.
 
 CRITICAL styling: use inline style={{}} for ALL layout properties (display, gridTemplateColumns, flex, width, height).
 Tailwind is safe only for: colors (bg-*, text-*, border-*), spacing (p-*, m-*, gap-*), typography, borders.
@@ -417,10 +418,12 @@ def _build_chat_system_prompt(manifest: dict) -> str:
     else:
         ds_lines = "  (no list endpoints found)"
 
+    today = datetime.now().strftime("%Y-%m-%d")
     intro = (
         f"You are a conversational UI agent. "
         f"You help users customize how their data is displayed by updating a config schema "
         f"or generating a custom React component.\n\n"
+        f"Today's date: {today}\n\n"
         f"--- DATA MODEL ---\n\n"
         f"{entity_section}\n\n"
         f"Valid data_source values (use the exact intent string):\n{ds_lines}"
@@ -492,7 +495,7 @@ def _replace_subcomponent(code: str, name: str, new_func: str) -> str:
     return code
 
 
-def _make_subcomponent_modify_prompt(components: dict[str, str], target: str | None) -> str:
+def _make_subcomponent_modify_prompt(components: dict[str, str], target: str | None, today: str | None = None) -> str:
     if target and target in components:
         component_section = f"Modify this sub-component:\n```jsx\n{components[target]}\n```"
         other_sections = "\n\n".join(
@@ -520,15 +523,18 @@ def _make_subcomponent_modify_prompt(components: dict[str, str], target: str | N
         'Include every sub-component you modified in "changes". Most edits touch 1-2; never return unchanged components.\n'
         'Or if ambiguous: {"action":"question","message":"your question"}'
     )
+    today_line = f"Today's date: {today}\n\n" if today else ""
     return (
         "You are a surgical React component editor. Make the MINIMUM change needed.\n\n"
+        + today_line
         + component_section
         + "\n\nRULES:\n"
         "- Preserve ALL existing logic, variable names, and styling not explicitly mentioned.\n"
         "- Keep the `data-sc=\"ComponentName\"` attribute on the root element of every function you return.\n"
         "- Do NOT redesign, reformat, or restyle anything not explicitly requested.\n"
         "- PROP DRILLING: If adding a new prop to a child component, you MUST also update every parent that renders it to pass that prop through. Include all affected components in your changes array.\n"
-        "- Available in scope (do NOT import): React, useState, useEffect, useMemo, formatDate(iso), groupItems(items, field)\n"
+        "- Available in scope (do NOT import): React, useState, useEffect, useMemo, formatDate(iso), groupItems(items, field), today\n"
+        "- today is a \"YYYY-MM-DD\" string in the user's local timezone. Use it for due-date checks: item.due_date?.slice(0,10) === today. Never construct new Date() and compare — timezone mismatch will break it.\n"
         "- Layout receives two props: `items` (array) and `onItemClick(item)` (function). Call `onItemClick(item)` when the user clicks a card/row/item to open its detail view. Always wire this up on clickable items.\n"
         + tooltip_rule + "\n"
         "- BORDER RADIUS: always use inline style={{borderRadius:'1rem'}} NOT Tailwind rounded-* classes. Tailwind rounded-* is unreliable in generated components.\n"
@@ -747,6 +753,7 @@ async def chat(body: ChatRequest):
     from models import Thread as ThreadModel
     manifest = generate_manifest([ThreadModel])
     chat_system_prompt = _build_chat_system_prompt(manifest)
+    today = datetime.now().strftime("%Y-%m-%d")
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
 
     if body.current_code:
@@ -790,7 +797,7 @@ async def chat(body: ChatRequest):
         raw = get_anthropic().messages.create(
             model="claude-sonnet-4-6",
             max_tokens=8096,
-            system=_make_subcomponent_modify_prompt(components, target),
+            system=_make_subcomponent_modify_prompt(components, target, today),
             messages=messages,
         ).content[0].text.strip()
 
@@ -829,7 +836,7 @@ async def chat(body: ChatRequest):
                     raw2 = get_anthropic().messages.create(
                         model="claude-sonnet-4-6",
                         max_tokens=8096,
-                        system=_make_subcomponent_modify_prompt(components, target),
+                        system=_make_subcomponent_modify_prompt(components, target, today),
                         messages=messages + [{"role": "assistant", "content": raw}, {"role": "user", "content": fix_msg}],
                     ).content[0].text.strip()
                     try:
