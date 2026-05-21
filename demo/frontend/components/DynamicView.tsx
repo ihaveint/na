@@ -9,7 +9,7 @@ interface Props {
   onItemClick?: (item: Item) => void
 }
 
-interface BoundaryProps { children: ReactNode; onError: (msg: string) => void }
+interface BoundaryProps { children?: ReactNode; onError: (msg: string) => void }
 interface BoundaryState { caught: boolean }
 
 class ErrorBoundary extends Component<BoundaryProps, BoundaryState> {
