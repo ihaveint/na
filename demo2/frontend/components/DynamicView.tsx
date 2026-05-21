@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, Component, type ReactNode } from "react"
 import type { Transaction } from "@/lib/types"
 import { formatDate, formatAmount, categoryColor, groupTransactions } from "@/lib/utils"
 
@@ -7,6 +7,16 @@ interface Props {
   code: string
   transactions: Transaction[]
   onTransactionClick?: (tx: Transaction) => void
+}
+
+interface BoundaryProps { children: ReactNode; onError: (msg: string) => void }
+interface BoundaryState { caught: boolean }
+
+class ErrorBoundary extends Component<BoundaryProps, BoundaryState> {
+  state: BoundaryState = { caught: false }
+  componentDidCatch(e: Error) { this.props.onError(e.message) }
+  static getDerivedStateFromError() { return { caught: true } }
+  render() { return this.state.caught ? null : this.props.children }
 }
 
 export default function DynamicView({ code, transactions, onTransactionClick }: Props) {
@@ -51,12 +61,20 @@ export default function DynamicView({ code, transactions, onTransactionClick }: 
 
         if (cancelled || !containerRef.current) return
 
-        if (!rootRef.current) {
-          rootRef.current = ReactDOM.createRoot(containerRef.current)
+        // Always recreate the root so a previously errored root never gets reused.
+        if (rootRef.current) {
+          rootRef.current.unmount()
+          rootRef.current = null
         }
+        rootRef.current = ReactDOM.createRoot(containerRef.current)
 
+        const onRenderError = (msg: string) => { if (!cancelled) setError(msg) }
         rootRef.current.render(
-          React.default.createElement(Layout, { transactions, onTransactionClick })
+          React.default.createElement(
+            ErrorBoundary,
+            { onError: onRenderError },
+            React.default.createElement(Layout, { transactions, onTransactionClick })
+          )
         )
         setError(null)
       } catch (e: unknown) {
@@ -65,7 +83,14 @@ export default function DynamicView({ code, transactions, onTransactionClick }: 
     }
 
     render()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      // Unmount immediately so the next code change starts from a clean root.
+      if (rootRef.current) {
+        rootRef.current.unmount()
+        rootRef.current = null
+      }
+    }
   }, [code, transactions])
 
   if (error) {
